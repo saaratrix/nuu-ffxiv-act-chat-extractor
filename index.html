@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="A chat parser for Final Fantasy XIV Online with the Advanced Combat Tracker (ACT) plugin." />
+  <title>Nuu FFXIV ACT Chat Extractor</title>
+  <!-- Nuu nuu!! -->
+  <style type="text/css">
+    body {
+      font-family: Arial;
+    }
+
+    .line {
+      margin: 0.5rem 0;
+    }
+
+    .sender {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+<section class="log-parser">
+  <h1>Select your log.</h1>
+  <input id="loginput" type="file">
+  <p id="error"></p>
+</section>
+<section class="parsed-log">
+  <div id="output"></div>
+</section>
+
+<script type="text/javascript">
+  (function() {
+    /**
+     * Example data:
+     * code: "001d"
+     * message: "Phira Cranelis gives Varlina Volkskrieg a big hug."
+     * sender: "Phira Cranelis"
+     * time: "20:49:41"
+     * @typedef {{ code: string, message: string, sender: string, time: string }} Line
+     */
+
+    // Regexes from https://github.com/ErstonGreatman/ffxiv-act-chat-extractor
+    // This one has 2 groups, name & realm.
+    const nameRegex = /(?<name>[A-Z][a-z']+\s[A-Z][a-z']+)(?<realm>[A-Z][a-z]+)?/;
+    // This one has 4 groups, time, code, sender and message
+    const messageRegex = /00\|\d+-\d+-\d+T(?<time>\d+:\d+:\d+).+?\|(?<code>.+)\|.*?(?<sender>[A-Z][A-z']+? [A-z']+).*?\|(?<message>.+)\|[^]+/;
+
+    // Also copied & modified from https://github.com/ErstonGreatman/ffxiv-act-chat-extractor
+    const codeDetails = {
+    '000a': { code: '000a', class: 'say', name: 'Say', color: '#ffffff' },
+    '000b': { code: '000b', class: 'shout', name: 'Shout', color: '#eb9234' },
+    '000e': { code: '000e', class: 'party', name: 'Party', color: '#1ecce3' },
+    '000f': { code: '000f', class: 'alliance', name: 'Alliance', color: '#eb9234' },
+    '0018': { code: '0018', class: 'free', name: 'Free Company', color: '#54b068' },
+    '001d': { code: '001d', class: 'emote', name: 'Emote', color: '#ffffff' },
+    '001e': { code: '001e', class: 'yell', name: 'Yell', color: '#c9c722' },
+    '0039': { code: '0039', class: 'whisper', name: 'Whisper', color: '#d439cc' },
+    '0010': { code: '0010', class: 'linkshell-1', name: 'Linkshell 1', color: '#31b56a' },
+    '0011': { code: '0011', class: 'linkshell-2', name: 'Linkshell 2', color: '#2a8c9c' },
+    '0012': { code: '0012', class: 'linkshell-3', name: 'Linkshell 3', color: '#296196' },
+    '0013': { code: '0013', class: 'linkshell-4', name: 'Linkshell 4', color: '#2d509c' },
+    '0014': { code: '0014', class: 'linkshell-5', name: 'Linkshell 5', color: '#5959b1' },
+    '0015': { code: '0015', class: 'linkshell-6', name: 'Linkshell 6', color: '#7159b1' },
+    '0016': { code: '0016', class: 'linkshell-7', name: 'Linkshell 7', color: '#7b51af' },
+    '0017': { code: '0017', class: 'linkshell-8', name: 'Linkshell 8', color: '#9551af' },
+    };
+
+    let errorElement;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const logInput = document.getElementById('loginput');
+      errorElement = document.getElementById('error');
+
+      logInput.addEventListener('change', handleLogUpload, false);
+    });
+
+    function handleLogUpload(event) {
+      if (!event.target.files?.length) {
+        return;
+      }
+
+      const file = event.target.files[0];
+      const fr = new FileReader();
+      fr.onload = () => {
+        parseLog(fr.result || '');
+      }
+      fr.onerror = () => {
+
+      }
+
+      fr.readAsText(file);
+    }
+
+    function parseLog(logText) {
+      if (!logText) {
+        return;
+      }
+
+      const lines = getLines(logText);
+
+      generateOutput(lines);
+    }
+
+    /**
+     *
+     * @param text
+     * @returns {Line}
+     */
+    function getLines(text) {
+      const lines = text.split('\n');
+      const result = [];
+
+      for (const line of lines) {
+        const match = line.match(messageRegex);
+        if (!match || !match.groups) {
+          continue;
+        }
+
+        result.push({
+          code: match.groups['code'],
+          message: match.groups['message'],
+          sender: match.groups['sender'],
+          time: match.groups['time'],
+        })
+      }
+      return result;
+    }
+
+    /**
+     *
+     * @param {Line[]} lines
+     */
+    function generateOutput(lines) {
+      const outputElement = document.getElementById('output');
+      const fragment = document.createDocumentFragment();
+      for (const line of lines) {
+        const lineElement = createLineElement(line);
+        fragment.appendChild(lineElement);
+      }
+
+      // Finally add the fragment.
+      while (outputElement.firstChild) {
+        outputElement.removeChild(outputElement.firstChild);
+      }
+      outputElement.appendChild(fragment);
+    }
+
+    /**
+     * Since we aren't using any framework because this is a static html page - although something like Svelte could have been nice if it can be run without a localhost server.
+     * @param {Line} line
+     */
+    function createLineElement(line) {
+      const codeDetail = codeDetails[line.code];
+      const codeClass = codeDetail && codeDetail.class;
+      const element = document.createElement('p');
+      element.className = `line ${codeClass}`;
+      element.innerHTML = `<span class="time">[${line.time}]</span> <span class="sender">${line.sender}:</span> <span class="message">${line.message}</span>`;
+      return element;
+    }
+  })();
+</script>
+</body>
+</html>
