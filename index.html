@@ -7,8 +7,20 @@
   <title>Nuu FFXIV ACT Chat Extractor</title>
   <!-- Nuu nuu!! -->
   <style type="text/css">
+
+    .save-as {
+      margin-bottom: 0.5rem;
+      font-weight: bold;
+    }
+
     body {
       font-family: Arial;
+    }
+
+    #output {
+      padding: 0.5rem;
+      background-color: hsl(0, 0%, 5%);
+      text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.18);
     }
 
     .line {
@@ -26,7 +38,10 @@
   <input id="loginput" type="file">
   <p id="error"></p>
 </section>
-<section class="parsed-log">
+<section class="parsed-log" style="display: none;">
+  <div class="save-as">
+    <a class="save-as-html">Save chat</a>
+  </div>
   <div id="output"></div>
 </section>
 
@@ -35,8 +50,8 @@
     /**
      * Example data:
      * code: "001d"
-     * message: "Phira Cranelis gives Varlina Volkskrieg a big hug."
-     * sender: "Phira Cranelis"
+     * message: "Nuusie gives Tiggy a big bonk."
+     * sender: "Nuusie"
      * time: "20:49:41"
      * @typedef {{ code: string, message: string, sender: string, time: string }} Line
      */
@@ -47,6 +62,7 @@
     // This one has 4 groups, time, code, sender and message
     const messageRegex = /00\|\d+-\d+-\d+T(?<time>\d+:\d+:\d+).+?\|(?<code>.+)\|.*?(?<sender>[A-Z][A-z']+? [A-z']+).*?\|(?<message>.+)\|[^]+/;
 
+    let hasAddedCSS = false;
     // Also copied & modified from https://github.com/ErstonGreatman/ffxiv-act-chat-extractor
     const codeDetails = {
     '000a': { code: '000a', class: 'say', name: 'Say', color: '#ffffff' },
@@ -68,6 +84,8 @@
     };
 
     let errorElement;
+    let fileName = '';
+    let existingObjectURLs = [];
 
     window.addEventListener('DOMContentLoaded', () => {
       const logInput = document.getElementById('loginput');
@@ -81,7 +99,12 @@
         return;
       }
 
+      if (!hasAddedCSS) {
+        addCSS();
+      }
+
       const file = event.target.files[0];
+      fileName = file.name;
       const fr = new FileReader();
       fr.onload = () => {
         parseLog(fr.result || '');
@@ -101,6 +124,7 @@
       const lines = getLines(logText);
 
       generateOutput(lines);
+      generateSaveAsButtons()
     }
 
     /**
@@ -133,6 +157,8 @@
      * @param {Line[]} lines
      */
     function generateOutput(lines) {
+      const parsedLogElement = document.querySelector('.parsed-log');
+
       const outputElement = document.getElementById('output');
       const fragment = document.createDocumentFragment();
       for (const line of lines) {
@@ -145,6 +171,7 @@
         outputElement.removeChild(outputElement.firstChild);
       }
       outputElement.appendChild(fragment);
+      parsedLogElement.style.display = '';
     }
 
     /**
@@ -158,6 +185,86 @@
       element.className = `line ${codeClass}`;
       element.innerHTML = `<span class="time">[${line.time}]</span> <span class="sender">${line.sender}:</span> <span class="message">${line.message}</span>`;
       return element;
+    }
+
+    function createCSS() {
+      let css = '';
+      for (const detail of Object.values(codeDetails)) {
+        css += `
+          .${detail.class} {
+            color: ${detail.color};
+          }
+        `;
+      }
+      return css;
+    }
+
+    function addCSS() {
+      const styleElement = document.createElement("style");
+      const css = createCSS();
+
+      styleElement.appendChild(document.createTextNode(css));
+      document.head.appendChild(styleElement);
+
+      hasAddedCSS = true;
+    }
+
+    function generateSaveAsButtons() {
+      for (const existingUrl of existingObjectURLs) {
+        window.URL.revokeObjectURL(existingUrl);
+      }
+      existingObjectURLs = [];
+
+      generateSaveAsHTML();
+    }
+
+    function generateSaveAsHTML() {
+      const css = createCSS();
+      const outputElement = document.getElementById('output');
+      const saveAsHTMLAnchor = document.querySelector('.save-as-html');
+
+      const output = `
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${fileName}</title>
+  <style>
+    body {
+      font-family: Arial;
+    }
+
+    #output {
+      padding: 0.5rem;
+      background-color: hsl(0, 0%, 5%);
+      text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.18);
+    }
+
+    .line {
+      margin: 0.5rem 0;
+    }
+
+    .sender {
+      font-weight: bold;
+    }
+
+    ${css}
+  </style>
+</head>
+<body>
+  <div id="output">
+    ${outputElement.innerHTML}
+  </div>
+</body>
+</html>
+      `;
+
+      const blob = new Blob([output]);
+      const url = window.URL.createObjectURL(blob);
+      saveAsHTMLAnchor.href = url;
+      saveAsHTMLAnchor.download = fileName + '.html';
+
+      existingObjectURLs.push(url);
     }
   })();
 </script>
