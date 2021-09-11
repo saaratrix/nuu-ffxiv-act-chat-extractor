@@ -4,9 +4,24 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="A chat parser for Final Fantasy XIV Online with the Advanced Combat Tracker (ACT) plugin." />
-  <title>Nuu FFXIV ACT Chat Extractor</title>
+  <title>Nuu FFXIV ACT Plugin Chat Extractor</title>
   <!-- Nuu nuu!! -->
   <style type="text/css">
+    :root {
+      --color-light-hsl: hsl(0, 0%, 95%);
+      --color-light-highlight-hsl: hsl(0, 0%, 90%);
+      --color-dark-hsl: hsl(0, 0%, 5%);
+      --color-popover-background: hsl(0, 0%, 10%);
+      --color-dark-highlight-hsl: hsl(0, 0%, 15%);
+    }
+
+    a {
+      color: var(--color-light-hsl);
+    }
+
+    a:hover {
+      color: var(--color-light-highlight-hsl);
+    }
 
     .save-as {
       margin-bottom: 0.5rem;
@@ -16,14 +31,15 @@
     .filter {
       position: relative;
       display: flex;
+      gap: 0.5rem;
     }
 
     #filter-popover {
       position: absolute;
       max-width: 300px;
       padding: 0.5rem;
-      background-color: hsl(0, 0%, 10%);
-      border: 1px solid hsl(0, 0%, 95%);
+      background-color: var(--color-popover-background);
+      border: 1px solid var(--color-light-hsl);
       box-shadow: 5px 5px 15px 5px hsla(0, 0%, 95%, 0.1);
 
       /* This should be set by javascript. */
@@ -44,7 +60,7 @@
 
     .filter-types-toggle-container span:hover {
       text-decoration: underline;
-      text-decoration-color: hsl(0, 0%, 95%);
+      text-decoration-color: var(--color-light-hsl);
     }
 
     .filter-message-type {
@@ -53,11 +69,11 @@
     }
 
     .filter-message-type:hover {
-      background-color: hsl(0, 0%, 15%)
+      background-color: var(--color-dark-highlight-hsl);
     }
 
-    /* CSS below here that will go to the generated output as well */
-
+    /* CSS below here will go to the generated output as well */
+    /* Although it has to manually copied! */
     body {
       background-color: hsl(0, 0%, 5%);
       color: hsl(0, 0%, 95%);
@@ -85,7 +101,7 @@
   <p id="error"></p>
 </section>
 <section class="parsed-log" style="display: none;">
-  <div style="display: flex;">
+  <div style="display: flex; gap: 0.5rem;">
     <div class="save-as">
       <a class="save-as-html">Save chat</a>
     </div>
@@ -173,6 +189,11 @@
       '0015': { code: '0015', class: 'linkshell-6', name: 'Linkshell 6', color: '#7159b1', visible: true },
       '0016': { code: '0016', class: 'linkshell-7', name: 'Linkshell 7', color: '#7b51af', visible: true },
       '0017': { code: '0017', class: 'linkshell-8', name: 'Linkshell 8', color: '#9551af', visible: true },
+
+      // Other codes:
+      /*
+        0044: System messages, eg: "The limited-time event “Leap of Faith” is now underway in Round Square. All guests are encouraged to participate!"
+       */
     };
 
     /**
@@ -352,6 +373,8 @@
     function getLines(text) {
       const lines = text.split('\n');
       const result = [];
+      // We group all the errors so we only do 1 single console.log()
+      const errors = {};
 
       for (const line of lines) {
         const match = line.match(messageRegex);
@@ -359,13 +382,34 @@
           continue;
         }
 
-        result.push({
-          code: match.groups['code'],
+        const code = match.groups['code'];
+        let item = {
+          code,
           message: match.groups['message'],
           sender: match.groups['sender'],
           time: match.groups['time'],
-        })
+        };
+
+        if (!messageTypes[code]) {
+          let error = errors[code];
+          if (!errors[code]) {
+            error = {
+              code,
+              lines: [],
+            };
+            errors[code] = error
+          }
+          error.lines.push(item);
+          continue;
+        }
+
+        result.push(item);
       }
+
+      if (Object.values(errors).length > 0) {
+        console.log('Lines without codes:', errors);
+      }
+
       return result;
     }
 
@@ -401,7 +445,7 @@
       const parsedLogElement = document.querySelector('.parsed-log');
 
       const filteredLines = lines.filter(l => {
-        if (!messageTypes[l.code].visible) {
+        if (!messageTypes[l.code] || !messageTypes[l.code].visible) {
           return false;
         }
 
@@ -473,6 +517,7 @@
     // *********************************
 
     function generateSaveAsButtons() {
+      // To reduce memory leaks.
       for (const existingUrl of existingObjectURLs) {
         window.URL.revokeObjectURL(existingUrl);
       }
