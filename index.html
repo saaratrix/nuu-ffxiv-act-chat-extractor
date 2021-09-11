@@ -13,14 +13,60 @@
       font-weight: bold;
     }
 
+    .filter {
+      position: relative;
+      display: flex;
+    }
+
+    #filter-popover {
+      position: absolute;
+      max-width: 300px;
+      padding: 0.5rem;
+      background-color: hsl(0, 0%, 10%);
+      border: 1px solid hsl(0, 0%, 95%);
+      box-shadow: 5px 5px 15px 5px hsla(0, 0%, 95%, 0.1);
+
+      /* This should be set by javascript. */
+      top: 30px;
+    }
+
+    .filter-types-toggle-container {
+      display: flex;
+      gap: 1rem;
+      padding: 0.5rem 0;
+      font-weight: bold;
+      font-size: 0.85em;
+    }
+
+    .filter-types-toggle-container span {
+      cursor: pointer;
+    }
+
+    .filter-types-toggle-container span:hover {
+      text-decoration: underline;
+      text-decoration-color: hsl(0, 0%, 95%);
+    }
+
+    .filter-message-type {
+      cursor: pointer;
+      display: block;
+    }
+
+    .filter-message-type:hover {
+      background-color: hsl(0, 0%, 15%)
+    }
+
+    /* CSS below here that will go to the generated output as well */
+
     body {
+      background-color: hsl(0, 0%, 5%);
+      color: hsl(0, 0%, 95%);
+      text-shadow: 1px 1px 0px rgba(64, 64, 64, 0.18);
       font-family: Arial;
     }
 
     #output {
       padding: 0.5rem;
-      background-color: hsl(0, 0%, 5%);
-      text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.18);
     }
 
     .line {
@@ -39,13 +85,34 @@
   <p id="error"></p>
 </section>
 <section class="parsed-log" style="display: none;">
-  <div class="save-as">
-    <a class="save-as-html">Save chat</a>
+  <div style="display: flex;">
+    <div class="save-as">
+      <a class="save-as-html">Save chat</a>
+    </div>
+    <div class="filter">
+      <button class="filter-types">Filter Types</button>
+      <button class="filter-senders">Filter Senders</button>
+      <div id="filter-popover" style="display: none;">
+        <button onclick="closeFilterPopover()">Close</button>
+        <!-- The content is dynamically added by showFilterTypes, showFilterSenders -->
+        <div class="filter-popover-content"></div>
+      </div>
+    </div>
   </div>
   <div id="output"></div>
 </section>
 
 <script type="text/javascript">
+  function closeFilterPopover() {
+    const filterPopoverElement = document.getElementById('filter-popover');
+    filterPopoverElement.style.display = 'none';
+
+    const contentElement = filterPopoverElement.querySelector('.filter-popover-content');
+    while (contentElement.firstChild) {
+      contentElement.removeChild(contentElement.firstChild);
+    }
+  }
+
   (function() {
     /**
      * Example data:
@@ -56,6 +123,14 @@
      * @typedef {{ code: string, message: string, sender: string, time: string }} Line
      */
 
+    /**
+     * @typedef {{ code: string, class: string, name: string, color: string, [prependSender]: string, visible: boolean }} MessageType
+     */
+
+    /**
+     * @typedef {{ name: string, count: number, visible: boolean }} Sender
+     */
+
     // Regexes from https://github.com/ErstonGreatman/ffxiv-act-chat-extractor
     // This one has 2 groups, name & realm.
     const nameRegex = /(?<name>[A-Z][a-z']+\s[A-Z][a-z']+)(?<realm>[A-Z][a-z]+)?/;
@@ -63,37 +138,175 @@
     const messageRegex = /00\|\d+-\d+-\d+T(?<time>\d+:\d+:\d+).+?\|(?<code>.+)\|.*?(?<sender>[A-Z][A-z']+? [A-z']+).*?\|(?<message>.+)\|[^]+/;
 
     let hasAddedCSS = false;
+
+    /**
+     * @type {Line[]}
+     */
+    let currentParsedLines = [];
+
     // Also copied & modified from https://github.com/ErstonGreatman/ffxiv-act-chat-extractor
-    const codeDetails = {
-    '000a': { code: '000a', class: 'say', name: 'Say', color: '#ffffff' },
-    '000b': { code: '000b', class: 'shout', name: 'Shout', color: '#eb9234' },
-    '000e': { code: '000e', class: 'party', name: 'Party', color: '#1ecce3' },
-    '000f': { code: '000f', class: 'alliance', name: 'Alliance', color: '#eb9234' },
-    '0018': { code: '0018', class: 'free', name: 'Free Company', color: '#54b068' },
-    '001d': { code: '001d', class: 'emote', name: 'Emote', color: '#ffffff' },
-    '001e': { code: '001e', class: 'yell', name: 'Yell', color: '#c9c722' },
-    '0039': { code: '0039', class: 'whisper', name: 'Whisper', color: '#d439cc' },
-    '0010': { code: '0010', class: 'linkshell-1', name: 'Linkshell 1', color: '#31b56a' },
-    '0011': { code: '0011', class: 'linkshell-2', name: 'Linkshell 2', color: '#2a8c9c' },
-    '0012': { code: '0012', class: 'linkshell-3', name: 'Linkshell 3', color: '#296196' },
-    '0013': { code: '0013', class: 'linkshell-4', name: 'Linkshell 4', color: '#2d509c' },
-    '0014': { code: '0014', class: 'linkshell-5', name: 'Linkshell 5', color: '#5959b1' },
-    '0015': { code: '0015', class: 'linkshell-6', name: 'Linkshell 6', color: '#7159b1' },
-    '0016': { code: '0016', class: 'linkshell-7', name: 'Linkshell 7', color: '#7b51af' },
-    '0017': { code: '0017', class: 'linkshell-8', name: 'Linkshell 8', color: '#9551af' },
+    /**
+     * @type {Object.<string, MessageType>}
+     */
+    const messageTypes = {
+      '000a': { code: '000a', class: 'say', name: 'Say', color: '#ffffff', visible: true },
+      '000b': { code: '000b', class: 'shout', name: 'Shout', color: '#eb9234', visible: true },
+      '000e': { code: '000e', class: 'party', name: 'Party', color: '#1ecce3', visible: true },
+      '000f': { code: '000f', class: 'alliance', name: 'Alliance', color: '#eb9234', visible: true },
+      '0018': { code: '0018', class: 'free', name: 'Free Company', color: '#54b068', visible: true },
+      // 001c and 001d seems to be emotes.
+      '001c': { code: '001c', class: 'emote', name: 'Emote', color: '#ffffff', visible: true },
+      '001d': { code: '001d', class: 'emote', name: 'Emote', color: '#ffffff', visible: true },
+      '001e': { code: '001e', class: 'yell', name: 'Yell', color: '#c9c722', visible: true },
+
+      // Tell from you to someone!
+      '000c': { code: '000c', class: 'tell-to', name: 'Tell To', color: '#d439cc', prependSender: 'To ', visible: true },
+      // Tell from someone to you.
+      '000d': { code: '000d', class: 'tell-from', name: 'Tell From', color: '#d439cc', prependSender: 'From ', visible: true },
+
+      '0039': { code: '0039', class: 'whisper', name: 'Whisper', color: '#d439cc', visible: true },
+      '0010': { code: '0010', class: 'linkshell-1', name: 'Linkshell 1', color: '#31b56a', visible: true },
+      '0011': { code: '0011', class: 'linkshell-2', name: 'Linkshell 2', color: '#2a8c9c', visible: true },
+      '0012': { code: '0012', class: 'linkshell-3', name: 'Linkshell 3', color: '#296196', visible: true },
+      '0013': { code: '0013', class: 'linkshell-4', name: 'Linkshell 4', color: '#2d509c', visible: true },
+      '0014': { code: '0014', class: 'linkshell-5', name: 'Linkshell 5', color: '#5959b1', visible: true },
+      '0015': { code: '0015', class: 'linkshell-6', name: 'Linkshell 6', color: '#7159b1', visible: true },
+      '0016': { code: '0016', class: 'linkshell-7', name: 'Linkshell 7', color: '#7b51af', visible: true },
+      '0017': { code: '0017', class: 'linkshell-8', name: 'Linkshell 8', color: '#9551af', visible: true },
     };
 
+    /**
+     * @type {MessageType[]}
+     */
+    const messageTypesAsArray = Object.values(messageTypes);
+
+    /**
+     * @type {Sender[]}
+     */
+    const senders = [];
+
     let errorElement;
-    let fileName = '';
+    /**
+     * @type {HTMLElement}
+     */
+    let filterPopoverElement;
+    let logFilename = '';
     let existingObjectURLs = [];
 
     window.addEventListener('DOMContentLoaded', () => {
       const logInput = document.getElementById('loginput');
       errorElement = document.getElementById('error');
 
+      const filterTypesElement = document.querySelector('.filter-types');
+      filterTypesElement.addEventListener('click', showFilterTypes);
+
+      const filterSendersElement = document.querySelector('.filter-senders');
+      filterSendersElement.addEventListener('click', showFilterSenders);
+
+      filterPopoverElement = document.getElementById('filter-popover');
+
       logInput.addEventListener('change', handleLogUpload, false);
     });
 
+    // Oh dear, having to do this again because 1 single file ^.^
+    // *******************************************
+    // FILTER methods
+    // ******************************************
+    function showFilterTypes() {
+      const contentElement = showFilterPopoverAndGetContentElement();
+      const fragment = document.createDocumentFragment();
+
+      addTypesToggle(fragment);
+
+      for (const messageType of messageTypesAsArray) {
+        const messageTypeElement = document.createElement('label');
+        messageTypeElement.className = `filter-message-type ${messageType.class}`;
+
+        messageTypeElement.innerHTML = `
+<input id="${messageType.code}" type="checkbox">
+<span>${messageType.name}</span>
+        `;
+
+        const inputElement = messageTypeElement.querySelector('input');
+        inputElement.checked = messageType.visible;
+
+        // This will happen twice if you click on the <span> because once for the label and once for the checkbox.
+        messageTypeElement.onclick = () => {
+          messageType.visible = inputElement.checked;
+          generateOutput(currentParsedLines);
+        }
+
+        fragment.appendChild(messageTypeElement);
+      }
+
+      contentElement.appendChild(fragment);
+    }
+
+    /**
+     * @param {DocumentFragment} fragment
+     */
+    function addTypesToggle(fragment) {
+      const toggleContainer = document.createElement('div');
+      toggleContainer.className = 'filter-types-toggle-container';
+
+      const allToggle = document.createElement('span');
+      allToggle.innerText = 'All';
+      allToggle.onclick = () => {
+        setVisibility(true);
+      }
+
+      const noneToggle = document.createElement('span');
+      noneToggle.innerText = 'None';
+      noneToggle.onclick = () => {
+        setVisibility(false);
+      }
+
+      toggleContainer.appendChild(allToggle);
+      toggleContainer.appendChild(noneToggle);
+      fragment.appendChild(toggleContainer);
+
+      function setVisibility(visibility) {
+        const popoverElement = document.getElementById('filter-popover');
+        for (const messageType of messageTypesAsArray) {
+          messageType.visible = visibility;
+        }
+
+        /**
+         * @type {HTMLInputElement[]}
+         */
+        const messageInputElements = popoverElement.querySelectorAll('.filter-message-type input[type=checkbox]');
+        for (const element of messageInputElements) {
+          element.checked = visibility;
+        }
+        generateOutput(currentParsedLines);
+      }
+    }
+
+    function showFilterSenders() {
+      const contentElement = showFilterPopoverAndGetContentElement();
+    }
+
+    function showFilterPopoverAndGetContentElement() {
+      clearFilterPopover();
+      filterPopoverElement.style.display = '';
+      return filterPopoverElement.querySelector('.filter-popover-content');;
+    }
+
+    function clearFilterPopover() {
+      const contentElement = filterPopoverElement.querySelector('.filter-popover-content');
+
+      while (contentElement.firstChild) {
+        contentElement.removeChild(contentElement.firstChild);
+      }
+    }
+
+    // ***********************************
+    // Parsing methods
+    // ***********************************
+
+    /**
+     * @param {Event} event
+     */
     function handleLogUpload(event) {
       if (!event.target.files?.length) {
         return;
@@ -104,33 +317,37 @@
       }
 
       const file = event.target.files[0];
-      fileName = file.name;
+      logFilename = file.name;
       const fr = new FileReader();
       fr.onload = () => {
         parseLog(fr.result || '');
       }
       fr.onerror = () => {
-
+        const outputElement = document.getElementById('output');
+        outputElement.innerHTML = `Failed to read file ${logFilename}`;
       }
 
       fr.readAsText(file);
     }
 
+    /**
+     * @param {string} logText
+     */
     function parseLog(logText) {
       if (!logText) {
         return;
       }
 
-      const lines = getLines(logText);
+      currentParsedLines = getLines(logText);
 
-      generateOutput(lines);
-      generateSaveAsButtons()
+      addAllSenders(currentParsedLines);
+      generateOutput(currentParsedLines);
     }
 
     /**
      *
-     * @param text
-     * @returns {Line}
+     * @param {string} text
+     * @returns {Line[]}
      */
     function getLines(text) {
       const lines = text.split('\n');
@@ -153,15 +370,52 @@
     }
 
     /**
+     * @param {Line[]} lines
+     */
+    function addAllSenders(lines) {
+      senders.splice(0, senders.length);
+
+      for (const line of lines) {
+        let sender = senders.find((s) => s.name === line.sender);
+        if (!sender) {
+          sender = {
+            name: line.sender,
+            count: 0,
+            visible: true,
+          };
+          senders.push(sender);
+        }
+
+        sender.count++;
+      }
+    }
+
+    // *********************************
+    // Output methods
+    // *********************************
+    /**
      *
      * @param {Line[]} lines
      */
     function generateOutput(lines) {
       const parsedLogElement = document.querySelector('.parsed-log');
 
+      const filteredLines = lines.filter(l => {
+        if (!messageTypes[l.code].visible) {
+          return false;
+        }
+
+        const sender = senders.find(s => s.name === l.sender);
+        if (!senders || !sender.visible) {
+          return false;
+        }
+
+        return true;
+      });
+
       const outputElement = document.getElementById('output');
       const fragment = document.createDocumentFragment();
-      for (const line of lines) {
+      for (const line of filteredLines) {
         const lineElement = createLineElement(line);
         fragment.appendChild(lineElement);
       }
@@ -172,6 +426,9 @@
       }
       outputElement.appendChild(fragment);
       parsedLogElement.style.display = '';
+
+      // TODO: This should be solved more elegantly, maybe on mouseover it updates the URL? If that's possible to do on the fly.
+      generateSaveAsButtons();
     }
 
     /**
@@ -179,17 +436,19 @@
      * @param {Line} line
      */
     function createLineElement(line) {
-      const codeDetail = codeDetails[line.code];
+      const codeDetail = messageTypes[line.code];
       const codeClass = codeDetail && codeDetail.class;
       const element = document.createElement('p');
+      const prependSender = codeDetail && codeDetail.prependSender || '';
+
       element.className = `line ${codeClass}`;
-      element.innerHTML = `<span class="time">[${line.time}]</span> <span class="sender">${line.sender}:</span> <span class="message">${line.message}</span>`;
+      element.innerHTML = `<span class="time">[${line.time}]</span> <span class="sender">${prependSender}${line.sender}:</span> <span class="message">${line.message}</span>`;
       return element;
     }
 
     function createCSS() {
       let css = '';
-      for (const detail of Object.values(codeDetails)) {
+      for (const detail of messageTypesAsArray) {
         css += `
           .${detail.class} {
             color: ${detail.color};
@@ -209,6 +468,10 @@
       hasAddedCSS = true;
     }
 
+    // *********************************
+    // Save as methods
+    // *********************************
+
     function generateSaveAsButtons() {
       for (const existingUrl of existingObjectURLs) {
         window.URL.revokeObjectURL(existingUrl);
@@ -219,25 +482,35 @@
     }
 
     function generateSaveAsHTML() {
-      const css = createCSS();
       const outputElement = document.getElementById('output');
       const saveAsHTMLAnchor = document.querySelector('.save-as-html');
+      const output = getHTMLOutput(logFilename, outputElement.innerHTML);
+      const blob = new Blob([output]);
+      const url = window.URL.createObjectURL(blob);
+      saveAsHTMLAnchor.href = url;
+      saveAsHTMLAnchor.download = logFilename + '.html';
+      existingObjectURLs.push(url);
+    }
+
+    function getHTMLOutput(filename, content) {
+      const css = createCSS();
 
       const output = `
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${fileName}</title>
+  <title>${filename}</title>
   <style>
     body {
+      background-color: hsl(0, 0%, 5%);
+      color: hsl(0, 0%, 95%);
+      text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.18);
       font-family: Arial;
     }
 
     #output {
       padding: 0.5rem;
-      background-color: hsl(0, 0%, 5%);
-      text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.18);
     }
 
     .line {
@@ -253,18 +526,13 @@
 </head>
 <body>
   <div id="output">
-    ${outputElement.innerHTML}
+    ${content}
   </div>
 </body>
 </html>
       `;
 
-      const blob = new Blob([output]);
-      const url = window.URL.createObjectURL(blob);
-      saveAsHTMLAnchor.href = url;
-      saveAsHTMLAnchor.download = fileName + '.html';
-
-      existingObjectURLs.push(url);
+      return output;
     }
   })();
 </script>
