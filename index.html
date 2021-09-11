@@ -32,6 +32,10 @@
       position: relative;
       display: flex;
       gap: 0.5rem;
+
+      /* This is to allow the popover to grow in width. */
+      width: 100%;
+      max-width: 300px;
     }
 
     #filter-popover {
@@ -70,6 +74,15 @@
 
     .filter-message-type:hover {
       background-color: var(--color-dark-highlight-hsl);
+    }
+
+    .filter-senders-container {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .filter-sender {
+
     }
 
     /* CSS below here will go to the generated output as well */
@@ -237,7 +250,7 @@
       const contentElement = showFilterPopoverAndGetContentElement();
       const fragment = document.createDocumentFragment();
 
-      addTypesToggle(fragment);
+      addTypesToggle(fragment, messageTypesAsArray, '.filter-message-type input[type=checkbox]');
 
       for (const messageType of messageTypesAsArray) {
         const messageTypeElement = document.createElement('label');
@@ -263,10 +276,52 @@
       contentElement.appendChild(fragment);
     }
 
+    function showFilterSenders() {
+      const contentElement = showFilterPopoverAndGetContentElement();
+
+      const fragment = document.createDocumentFragment();
+
+      const sortedSenders = [...senders];
+      sortedSenders.sort((a, b) => {
+        return b.count - a.count;
+      });
+
+      addTypesToggle(fragment, sortedSenders, 'input[type=checkbox]');
+
+      const sendersContainerElement = document.createElement("div");
+      sendersContainerElement.className = 'filter-senders-container';
+
+      for (const sender of sortedSenders) {
+        const senderElement = document.createElement('label');
+        senderElement.className = `filter-sender`;
+
+        senderElement.innerHTML = `
+<input type="checkbox">
+<span>${sender.name}</span>
+<span class="sender-count">${sender.count}</span>
+        `;
+
+        const inputElement = senderElement.querySelector('input');
+        inputElement.checked = sender.visible;
+
+        senderElement.onclick = () => {
+          sender.visible = inputElement.checked;
+          generateOutput(currentParsedLines);
+        }
+
+        sendersContainerElement.appendChild(senderElement);
+      }
+
+      fragment.appendChild(sendersContainerElement);
+
+      contentElement.appendChild(fragment);
+    }
+
     /**
      * @param {DocumentFragment} fragment
+     * @param {{ visible: boolean }[]}
      */
-    function addTypesToggle(fragment) {
+    function addTypesToggle(fragment, items, query) {
       const toggleContainer = document.createElement('div');
       toggleContainer.className = 'filter-types-toggle-container';
 
@@ -288,23 +343,19 @@
 
       function setVisibility(visibility) {
         const popoverElement = document.getElementById('filter-popover');
-        for (const messageType of messageTypesAsArray) {
-          messageType.visible = visibility;
+        for (const item of items) {
+          item.visible = visibility;
         }
 
         /**
          * @type {HTMLInputElement[]}
          */
-        const messageInputElements = popoverElement.querySelectorAll('.filter-message-type input[type=checkbox]');
-        for (const element of messageInputElements) {
+        const inputElements = popoverElement.querySelectorAll(query);
+        for (const element of inputElements) {
           element.checked = visibility;
         }
         generateOutput(currentParsedLines);
       }
-    }
-
-    function showFilterSenders() {
-      const contentElement = showFilterPopoverAndGetContentElement();
     }
 
     function showFilterPopoverAndGetContentElement() {
