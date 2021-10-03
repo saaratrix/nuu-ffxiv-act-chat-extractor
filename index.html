@@ -24,7 +24,8 @@
     }
 
     .save-as {
-      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
       font-weight: bold;
     }
 
@@ -67,13 +68,13 @@
       text-decoration-color: var(--color-light-hsl);
     }
 
+    .hover-highlight:hover {
+      background-color: var(--color-dark-highlight-hsl);
+    }
+
     .filter-message-type {
       cursor: pointer;
       display: block;
-    }
-
-    .filter-message-type:hover {
-      background-color: var(--color-dark-highlight-hsl);
     }
 
     .filter-senders-container {
@@ -82,7 +83,7 @@
     }
 
     .filter-sender {
-
+      cursor: pointer;
     }
 
     /* CSS below here will go to the generated output as well */
@@ -121,6 +122,7 @@
     <div class="filter">
       <button class="filter-types">Filter Types</button>
       <button class="filter-senders">Filter Senders</button>
+      <button class="chat-settings">Chat settings</button>
       <div id="filter-popover" style="display: none;">
         <button onclick="closeFilterPopover()">Close</button>
         <!-- The content is dynamically added by showFilterTypes, showFilterSenders -->
@@ -142,6 +144,7 @@
     }
   }
 
+  // Auto calling function for its own scope.
   (function() {
     /**
      * Example data:
@@ -158,6 +161,14 @@
 
     /**
      * @typedef {{ name: string, count: number, visible: boolean }} Sender
+     */
+
+    /**
+     * @typedef {{ codes: string[], name: string, regex: RegExp, [customMatcher]: Function, active: boolean, method: Function }} TextTransformer
+     */
+
+    /**
+     * @typdef {{ text: string, transform: boolean }} TextMatchPart
      */
 
     // Regexes from https://github.com/ErstonGreatman/ffxiv-act-chat-extractor
@@ -184,7 +195,7 @@
       '000f': { code: '000f', class: 'alliance', name: 'Alliance', color: '#eb9234', visible: true },
       '0018': { code: '0018', class: 'free', name: 'Free Company', color: '#54b068', visible: true },
       // 001c and 001d seems to be emotes.
-      '001c': { code: '001c', class: 'emote', name: 'Emote', color: '#df7423', visible: true },
+      '001c': { code: '001c', class: 'emote', name: 'Custom Emote', color: '#df7423', visible: true },
       '001d': { code: '001d', class: 'emote', name: 'Emote', color: '#df7423', visible: true },
       '001e': { code: '001e', class: 'yell', name: 'Yell', color: '#c9c722', visible: true },
 
@@ -219,6 +230,18 @@
      */
     const senders = [];
 
+
+
+    /**
+     * @type {TextTransformer[]}
+     */
+    const transformTextRules = [
+      { codes: ['*'], name: 'Asterisks as emote', regex: /\*[^\*]+\*/gm, active: true, method: transformAsterisksAsEmote },
+      { codes: ['*'], name: '( Out of character )', customMatcher: getOutOfCharacterMatches, regex: /\([^\)]+\)/, active: true, method: transformOutOfCharacter },
+      // { codes: ['*'], excludeCodes: ['001c', '001d'], name: 'Treat non-quoted text as emote', regex: '', active: false },
+      // { codes: ['001c', '001d'], name: 'Treat quotes in emote as say', regex: '', active: false },
+    ];
+
     let errorElement;
     /**
      * @type {HTMLElement}
@@ -237,6 +260,9 @@
       const filterSendersElement = document.querySelector('.filter-senders');
       filterSendersElement.addEventListener('click', showFilterSenders);
 
+      const chatSettingsElement = document.querySelector('.chat-settings');
+      chatSettingsElement.addEventListener('click', showChatSettings);
+
       filterPopoverElement = document.getElementById('filter-popover');
 
       logInput.addEventListener('change', handleLogUpload, false);
@@ -254,7 +280,7 @@
 
       for (const messageType of messageTypesAsArray) {
         const messageTypeElement = document.createElement('label');
-        messageTypeElement.className = `filter-message-type ${messageType.class}`;
+        messageTypeElement.className = `filter-message-type ${messageType.class} hover-highlight`;
 
         messageTypeElement.innerHTML = `
 <input id="${messageType.code}" type="checkbox">
@@ -293,10 +319,10 @@
 
       for (const sender of sortedSenders) {
         const senderElement = document.createElement('label');
-        senderElement.className = `filter-sender`;
+        senderElement.className = `filter-sender hover-highlight`;
 
         senderElement.innerHTML = `
-<input type="checkbox">
+<input type="checkbox" class="hover-highlight">
 <span>${sender.name}</span>
 <span class="sender-count">${sender.count}</span>
         `;
@@ -373,6 +399,117 @@
     }
 
     // ***********************************
+    // Chat settings methods
+    // ***********************************
+    function showChatSettings() {
+      const contentElement = showFilterPopoverAndGetContentElement();
+
+      const fragment = document.createDocumentFragment();
+
+      const settingsContainerElement = document.createElement('div');
+      settingsContainerElement.innerHTML = `
+<label data-setting="asterisk-as-emote">
+  <input type="checkbox">
+  <span>* Asterisks as emote *</span>
+</label>
+      `;
+
+      fragment.appendChild(settingsContainerElement);
+
+      contentElement.appendChild(fragment);
+    }
+
+    // ***********************************
+    // Transform Text methods
+    // ***********************************
+
+    /**
+     * @param {TextMatchPart[]} textParts
+     */
+    function transformAsterisksAsEmote(textParts) {
+      let text = '';
+      for (const part of textParts) {
+        if (!part.transform) {
+          text += part.text;
+        } else {
+          const emoteColor = messageTypes['001c'].color;
+          text += `<span style="color: ${emoteColor}">${part.text}</span>`;
+        }
+      }
+
+      return text;
+    }
+
+    /**
+     * @param {string} text
+     * @param {TextTransformer} transformer
+     */
+    function getOutOfCharacterMatches(text, transformer) {
+      let matches = [];
+
+      const firstIndex = text.indexOf('(');
+      if (firstIndex === -1 || text.indexOf(')', firstIndex) === -1) {
+
+      }
+      if (!transformer.regex.test(text)) {
+        return matches;
+      }
+
+      let lookingForOpening = true;
+      let lookingForClosing = false;
+      let currentOpenParenthesisCount = 0;
+      let currentClosedParenthesisCount = 0;
+
+      let currentOpeningStart = -1;
+
+      for (let i = firstIndex; i < text.length; i++) {
+        const char = text[i];
+
+        if (lookingForOpening && char === '(') {
+          currentOpenParenthesisCount++;
+        } else if (lookingForClosing && char === ')') {
+          currentClosedParenthesisCount++;
+
+          if (currentClosedParenthesisCount === currentOpenParenthesisCount) {
+            lookingForOpening = true;
+            lookingForClosing = false;
+            currentOpenParenthesisCount = 0;
+
+            const length = i - currentOpeningStart + 1;
+            const match = [text.substr(currentOpeningStart, length)];
+            match.index = currentOpeningStart;
+
+            matches.push(match);
+          }
+        } else {
+          currentClosedParenthesisCount = 0;
+          if (lookingForOpening && currentOpenParenthesisCount > 0) {
+            currentOpeningStart = i - currentOpenParenthesisCount;
+            lookingForOpening = false;
+            lookingForClosing = true;
+          }
+        }
+      }
+      return matches;
+    }
+
+    /**
+     * @param {TextMatchPart[]} textParts
+     */
+    function transformOutOfCharacter(textParts) {
+      let text = '';
+      for (const part of textParts) {
+        if (!part.transform) {
+          text += part.text;
+        } else {
+          text += `<span style="opacity: 0.8">${part.text}</span>`;
+        }
+      }
+
+      return text;
+    }
+
+    // ***********************************
     // Parsing methods
     // ***********************************
 
@@ -417,7 +554,6 @@
     }
 
     /**
-     *
      * @param {string} text
      * @returns {Line[]}
      */
@@ -489,7 +625,6 @@
     // Output methods
     // *********************************
     /**
-     *
      * @param {Line[]} lines
      */
     function generateOutput(lines) {
@@ -535,9 +670,12 @@
       const codeClass = codeDetail && codeDetail.class;
       const element = document.createElement('p');
       const prependSender = codeDetail && codeDetail.prependSender || '';
+      const activeTransformers = transformTextRules.filter(r => r.active);
+
+      const message = createLineMessage(line, activeTransformers);
 
       element.className = `line ${codeClass}`;
-      element.innerHTML = `<span class="time">[${line.time}]</span> <span class="sender">${prependSender}${line.sender}:</span> <span class="message">${line.message}</span>`;
+      element.innerHTML = `<span class="time">[${line.time}]</span> <span class="sender">${prependSender}${line.sender}:</span> <span class="message">${message}</span>`;
       return element;
     }
 
@@ -551,6 +689,101 @@
         `;
       }
       return css;
+    }
+
+    /**
+     * @param {Line} line
+     * @param {TextTransformer[]} activeTransformers
+     */
+    function createLineMessage(line, activeTransformers) {
+      if (!activeTransformers?.length) {
+        return line.message;
+      }
+
+      let message = line.message;
+      for (const transformer of activeTransformers) {
+        message = tryTransformText(message, transformer, line.code);
+      }
+
+      return message;
+    }
+
+    /**
+     * @param {string} text
+     * @param {TextTransformer} transformer
+     * @param {string} lineCode
+     */
+    function tryTransformText(text, transformer, lineCode) {
+      let canTransform = false;
+      for (const code of transformer.codes) {
+        if (code === '*') {
+          canTransform = true;
+          break;
+        }
+
+        if (code === lineCode) {
+          canTransform = true;
+          break;
+        }
+      }
+
+      if (!canTransform) {
+        return text;
+      }
+
+      const matchedText = getMatchedText(text, transformer);
+      if (!matchedText?.length) {
+        return text;
+      }
+
+      return transformer.method(matchedText);
+    }
+
+    /**
+     * @param {string} text
+     * @param {TextTransformer} transformer
+     * @returns {TextMatchPart[] | undefined}
+     */
+    function getMatchedText(text, transformer) {
+      let matches;
+
+      if (transformer.customMatcher) {
+        matches = transformer.customMatcher(text, transformer);
+      } else if (transformer.regex) {
+        matches = [...text.matchAll(transformer.regex)];
+      }
+
+      if (!matches?.length) {
+        return undefined;
+      }
+
+
+      let result = [];
+      let currentIndex = 0;
+      for (const match of matches) {
+        const before = text.substr(currentIndex, match.index - currentIndex);
+        if (before.length) {
+          result.push({
+            text: before,
+            transform: false,
+          });
+        }
+
+        result.push({
+          text: match[0],
+          transform: true,
+        });
+
+        currentIndex = match.index + match[0].length;
+      }
+
+      if (currentIndex < text.length) {
+        result.push({
+          text: text.substr(currentIndex),
+          trasform: false,
+        });
+      }
+      return result;
     }
 
     function addCSS() {
