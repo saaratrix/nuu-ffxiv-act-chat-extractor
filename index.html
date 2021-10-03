@@ -68,6 +68,11 @@
       text-decoration-color: var(--color-light-hsl);
     }
 
+    .hover-highlight {
+      /* If you click the label it can get text selected. */
+      user-select: none;
+    }
+
     .hover-highlight:hover {
       background-color: var(--color-dark-highlight-hsl);
     }
@@ -84,6 +89,14 @@
 
     .filter-sender {
       cursor: pointer;
+    }
+
+    .chat-settings-popover-container {
+      margin-top: 0.5rem;
+    }
+
+    .chat-setting {
+
     }
 
     /* CSS below here will go to the generated output as well */
@@ -407,12 +420,30 @@
       const fragment = document.createDocumentFragment();
 
       const settingsContainerElement = document.createElement('div');
-      settingsContainerElement.innerHTML = `
-<label data-setting="asterisk-as-emote">
+      settingsContainerElement.className = 'chat-settings-popover-container';
+
+      for (const rule of transformTextRules) {
+        const ruleElement = document.createElement('div');
+        ruleElement.className = 'chat-setting hover-highlight';
+
+        ruleElement.innerHTML = `
+<label>
   <input type="checkbox">
-  <span>* Asterisks as emote *</span>
+  <span>${rule.name}</span>
 </label>
-      `;
+        `;
+
+        const input = ruleElement.querySelector('input');
+        input.checked = rule.active;
+
+        const label = ruleElement.querySelector('label');
+        label.addEventListener('click', () => {
+          rule.active = input.checked;
+          generateOutput(currentParsedLines);
+        });
+
+        settingsContainerElement.appendChild(ruleElement);
+      }
 
       fragment.appendChild(settingsContainerElement);
 
