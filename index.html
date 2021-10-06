@@ -13,6 +13,8 @@
       --color-dark-hsl: hsl(0, 0%, 5%);
       --color-popover-background: hsl(0, 0%, 10%);
       --color-dark-highlight-hsl: hsl(0, 0%, 15%);
+
+      --color-width: 20px;
     }
 
     a {
@@ -41,6 +43,7 @@
 
     #filter-popover {
       position: absolute;
+      z-index: 10;
       max-width: 300px;
       padding: 0.5rem;
       background-color: var(--color-popover-background);
@@ -75,6 +78,39 @@
 
     .hover-highlight:hover {
       background-color: var(--color-dark-highlight-hsl);
+    }
+
+    input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+    input[type="color"]::-webkit-color-swatch {
+      border: none;
+    }
+    input[type="color"]::-moz-color-swatch {
+      border: none;
+    }
+
+    input[type=color] {
+      width: var(--color-width);
+      height: var(--color-width);
+      border: 1px solid grey;
+      cursor: pointer;
+    }
+
+    .filter-message-type-grid {
+      display: grid;
+      grid-template-columns: 1fr var(--color-width);
+      grid-column-gap: 0.25em;
+      margin-top: 0.25em;
+    }
+
+    .filter-message-type-grid input[type=color] {
+      opacity: 0.2;
+      transition: opacity 50ms ease-in;
+    }
+
+    .filter-message-type-grid:hover input[type=color] {
+      opacity: 1;
     }
 
     .filter-message-type {
@@ -208,7 +244,7 @@
       '000f': { code: '000f', class: 'alliance', name: 'Alliance', color: '#eb9234', visible: true },
       '0018': { code: '0018', class: 'free', name: 'Free Company', color: '#54b068', visible: true },
       // 001c and 001d seems to be emotes.
-      '001c': { code: '001c', class: 'emote', name: 'Custom Emote', color: '#df7423', visible: true },
+      '001c': { code: '001c', class: 'emote-custom', name: 'Custom Emote', color: '#df7423', visible: true },
       '001d': { code: '001d', class: 'emote', name: 'Emote', color: '#df7423', visible: true },
       '001e': { code: '001e', class: 'yell', name: 'Yell', color: '#c9c722', visible: true },
 
@@ -242,8 +278,6 @@
      * @type {Sender[]}
      */
     const senders = [];
-
-
 
     /**
      * @type {TextTransformer[]}
@@ -292,8 +326,11 @@
       addTypesToggle(fragment, messageTypesAsArray, '.filter-message-type input[type=checkbox]');
 
       for (const messageType of messageTypesAsArray) {
+        const gridContainer = document.createElement('div');
+        gridContainer.className = 'filter-message-type-grid hover-highlight';
+
         const messageTypeElement = document.createElement('label');
-        messageTypeElement.className = `filter-message-type ${messageType.class} hover-highlight`;
+        messageTypeElement.className = `filter-message-type ${messageType.class}`;
 
         messageTypeElement.innerHTML = `
 <input id="${messageType.code}" type="checkbox">
@@ -309,7 +346,24 @@
           generateOutput(currentParsedLines);
         }
 
-        fragment.appendChild(messageTypeElement);
+        const colorChanger = document.createElement('input');
+        colorChanger.type = 'color';
+        colorChanger.value = messageType.color;
+        colorChanger._oldValue = messageType.color;
+        colorChanger.addEventListener('input', () => {
+          if (colorChanger.value === colorChanger._oldValue) {
+            return;
+          }
+
+          colorChanger._oldValue = colorChanger.value;
+          messageType.color = colorChanger.value;
+          updateColours();
+        });
+
+        gridContainer.appendChild(messageTypeElement);
+        gridContainer.appendChild(colorChanger);
+
+        fragment.appendChild(gridContainer);
       }
 
       contentElement.appendChild(fragment);
@@ -463,8 +517,8 @@
         if (!part.transform) {
           text += part.text;
         } else {
-          const emoteColor = messageTypes['001c'].color;
-          text += `<span style="color: ${emoteColor}">${part.text}</span>`;
+          const className = messageTypes['001c'].class;
+          text += `<span class="${className}">${part.text}</span>`;
         }
       }
 
@@ -788,7 +842,6 @@
         return undefined;
       }
 
-
       let result = [];
       let currentIndex = 0;
       for (const match of matches) {
@@ -811,7 +864,7 @@
       if (currentIndex < text.length) {
         result.push({
           text: text.substr(currentIndex),
-          trasform: false,
+          transform: false,
         });
       }
       return result;
@@ -825,6 +878,20 @@
       document.head.appendChild(styleElement);
 
       hasAddedCSS = true;
+    }
+
+    function updateColours() {
+      const style = document.styleSheets[1];
+
+      while (style.cssRules.length) {
+        style.removeRule(0);
+      }
+      let index = 0;
+
+      for (const messageType of messageTypesAsArray) {
+        const css = `.${messageType.class} { color: ${messageType.color}; }`;
+        style.insertRule(css, index++);
+      }
     }
 
     // *********************************
