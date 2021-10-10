@@ -17,7 +17,7 @@ Some code copied from the repository https://github.com/ErstonGreatman/ffxiv-act
 ----
 How it looks like:
 
-![image](https://user-images.githubusercontent.com/16946048/135769126-8f619e25-f521-484a-a6fb-1921219dfd1f.png)
+![image](https://user-images.githubusercontent.com/16946048/136702736-59b35614-70df-4e01-9253-8c4a0292ba7d.png)
 ![image](https://user-images.githubusercontent.com/16946048/132962660-8a319c7e-2b5f-4985-8bce-5e88d99d9346.png)
 ![image](https://user-images.githubusercontent.com/16946048/132962667-e09a2a7a-8076-47f5-b8e5-a74b301d4028.png)
 
