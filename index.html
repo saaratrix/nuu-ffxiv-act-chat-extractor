@@ -760,10 +760,11 @@
           continue;
         }
 
+        const message = escapeHTML(match.groups['message']);
         const code = match.groups['code'];
         let item = {
           code,
-          message: match.groups['message'],
+          message,
           sender: match.groups['sender'],
           time: match.groups['time'],
         };
@@ -789,6 +790,15 @@
       }
 
       return result;
+    }
+
+    // Source: https://stackoverflow.com/a/6234804/2437350
+    function escapeHTML(text) {
+      return text.replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
     /**
