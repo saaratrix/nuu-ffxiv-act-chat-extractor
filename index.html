@@ -233,6 +233,8 @@
     const messageRegex = /00\|\d+-\d+-\d+T(?<time>\d+:\d+:\d+).+?\|(?<code>.+)\|.*?(?<sender>[A-Z][A-z']+? [A-z']+).*?\|(?<message>.+)\|[^]+/;
 
     let hasAddedCSS = false;
+    let isSaveAsDirty = false;
+    let alwaysUpdateBlobs = false;
 
     /**
      * @type {Line[]}
@@ -346,6 +348,19 @@
           closeFilterPopover();
         }
       });
+
+      // If you don't have hover capabilities we need to always update the blobs.
+      // The chance of someone using this from a touchscreen only is rather low though but you never know!
+      // I think this can just be a click event but maybe it doesn't work in all browsers as we're updating the URL on click.
+      // Plus the URL doesn't exist then.
+      if (window.matchMedia('(any-hover: none)').matches) {
+        alwaysUpdateBlobs = true;
+      } else {
+        const saveAsHTMLAnchor = document.querySelector('.save-as-html');
+        saveAsHTMLAnchor.addEventListener('pointerover', () => {
+          onMouseOverUpdateSaveAsbuttons();
+        });
+      }
     });
 
     // Oh dear, having to do this again because 1 single file ^.^
@@ -723,8 +738,11 @@
         parseLog(fr.result || '');
       }
       fr.onerror = () => {
+        errorElement.innerHTML = `Failed to read file ${logFilename}`;
         const outputElement = document.getElementById('output');
-        outputElement.innerHTML = `Failed to read file ${logFilename}`;
+        while (outputElement.firstChild) {
+          outputElement.removeChild(outputElement.firstChild);
+        }
       }
 
       fr.readAsText(file);
@@ -737,6 +755,11 @@
       if (!logText) {
         return;
       }
+
+      // Reset variables and close potential popover.
+      closeFilterPopover();
+      customSenderColours.splice(0, customSenderColours.length);
+      clearObjectURLs();
 
       currentParsedLines = getLines(logText);
 
@@ -867,8 +890,7 @@
       outputElement.appendChild(fragment);
       parsedLogElement.style.display = '';
 
-      // TODO: This should be solved more elegantly, maybe on mouseover it updates the URL? If that's possible to do on the fly.
-      generateSaveAsButtons();
+      dirtySaveAsAndTryUpdate();
     }
 
     /**
@@ -1028,20 +1050,39 @@
         style.insertRule(css, index++);
       }
 
-      generateSaveAsButtons();
+      dirtySaveAsAndTryUpdate();
     }
 
     // *********************************
     // Save as methods
     // *********************************
-
-    function generateSaveAsButtons() {
+    function clearObjectURLs() {
       // To reduce memory leaks.
       for (const existingUrl of existingObjectURLs) {
         window.URL.revokeObjectURL(existingUrl);
       }
       existingObjectURLs = [];
+    }
 
+    function onMouseOverUpdateSaveAsbuttons() {
+      if (!isSaveAsDirty) {
+        return;
+      }
+
+      generateSaveAsButtons();
+    }
+
+    function dirtySaveAsAndTryUpdate() {
+      isSaveAsDirty = true;
+
+      if (alwaysUpdateBlobs) {
+        generateSaveAsButtons();
+      }
+    }
+
+    function generateSaveAsButtons() {
+      isSaveAsDirty = false;
+      clearObjectURLs();
       generateSaveAsHTML();
     }
 
