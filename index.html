@@ -41,6 +41,11 @@
       max-width: 300px;
     }
 
+    .filter button {
+      /* Easy way to make buttons not wrap on 2 lines! */
+      white-space: nowrap;
+    }
+
     #filter-popover {
       position: absolute;
       z-index: 10;
@@ -171,10 +176,11 @@
     <div class="filter">
       <button class="filter-types">Filter Types</button>
       <button class="filter-senders">Filter Senders</button>
+      <button class="sender-colours">Sender Colours</button>
       <button class="chat-settings">Chat settings</button>
       <div id="filter-popover" style="display: none;">
         <button onclick="closeFilterPopover()">Close</button>
-        <!-- The content is dynamically added by showFilterTypes, showFilterSenders -->
+        <!-- The content is dynamically added by showFilterTypes, showFilterSenders, sender colours and chat settingsi -->
         <div class="filter-popover-content"></div>
       </div>
     </div>
@@ -201,15 +207,15 @@
      * message: "Nuusie gives Tiggy a big bonk."
      * sender: "Nuusie"
      * time: "20:49:41"
-     * @typedef {{ code: string, message: string, sender: string, time: string }} Line
+     * @typedef {{ code: string, message: string, sender: string, time: string, senderReference: Sender }} Line
      */
 
     /**
-     * @typedef {{ code: string, class: string, name: string, color: string, [prependSender]: string, visible: boolean }} MessageType
+     * @typedef {{ code: string, class: string, name: string, color: string, [prependSender]: string, [suffixSender]: string, visible: boolean }} MessageType
      */
 
     /**
-     * @typedef {{ name: string, count: number, visible: boolean }} Sender
+     * @typedef {{ name: string, count: number, visible: boolean, [customColor]: string, class: string }} Sender
      */
 
     /**
@@ -217,7 +223,7 @@
      */
 
     /**
-     * @typdef {{ text: string, transform: boolean }} TextMatchPart
+     * @typedef {{ text: string, transform: boolean }} TextMatchPart
      */
 
     // Regexes from https://github.com/ErstonGreatman/ffxiv-act-chat-extractor
@@ -249,9 +255,9 @@
       '001e': { code: '001e', class: 'yell', name: 'Yell', color: '#c9c722', visible: true },
 
       // Tell from you to someone!
-      '000c': { code: '000c', class: 'tell-to', name: 'Tell To', color: '#d439cc', prependSender: 'To ', visible: true },
+      '000c': { code: '000c', class: 'tell-to', name: 'Tell To', color: '#d439cc', prependSender: 'To ', suffixSender: '', visible: true },
       // Tell from someone to you.
-      '000d': { code: '000d', class: 'tell-from', name: 'Tell From', color: '#d439cc', prependSender: 'From ', visible: true },
+      '000d': { code: '000d', class: 'tell-from', name: 'Tell From', color: '#d439cc', prependSender: 'From ', suffixSender: '', visible: true },
 
       '0039': { code: '0039', class: 'whisper', name: 'Whisper', color: '#d439cc', visible: true },
       '0010': { code: '0010', class: 'linkshell-1', name: 'Linkshell 1', color: '#31b56a', visible: true },
@@ -273,6 +279,11 @@
      * @type {MessageType[]}
      */
     const messageTypesAsArray = Object.values(messageTypes);
+
+    /**
+     * @type {Sender[]}
+     */
+    const customSenderColours = [];
 
     /**
      * @type {Sender[]}
@@ -301,18 +312,40 @@
       const logInput = document.getElementById('loginput');
       errorElement = document.getElementById('error');
 
-      const filterTypesElement = document.querySelector('.filter-types');
+      const filterRootElement = document.querySelector('.filter');
+
+      const filterTypesElement = filterRootElement.querySelector('.filter-types');
       filterTypesElement.addEventListener('click', showFilterTypes);
 
-      const filterSendersElement = document.querySelector('.filter-senders');
+      const filterSendersElement = filterRootElement.querySelector('.filter-senders');
       filterSendersElement.addEventListener('click', showFilterSenders);
 
-      const chatSettingsElement = document.querySelector('.chat-settings');
+      const senderColoursElement = filterRootElement.querySelector('.sender-colours');
+      senderColoursElement.addEventListener('click', showSenderColours);
+
+      const chatSettingsElement = filterRootElement.querySelector('.chat-settings');
       chatSettingsElement.addEventListener('click', showChatSettings);
 
       filterPopoverElement = document.getElementById('filter-popover');
 
       logInput.addEventListener('change', handleLogUpload, false);
+
+      document.addEventListener('click', (event) => {
+        let closePopup = true;
+        let target = event.target;
+        while (target) {
+          if (target === filterRootElement) {
+            closePopup = false;
+            break;
+          }
+
+          target = target.parentElement;
+        }
+
+        if (closePopup) {
+          closeFilterPopover();
+        }
+      });
     });
 
     // Oh dear, having to do this again because 1 single file ^.^
@@ -374,10 +407,7 @@
 
       const fragment = document.createDocumentFragment();
 
-      const sortedSenders = [...senders];
-      sortedSenders.sort((a, b) => {
-        return b.count - a.count;
-      });
+      const sortedSenders = getSortedSenders();
 
       addTypesToggle(fragment, sortedSenders, 'input[type=checkbox]');
 
@@ -465,12 +495,88 @@
       }
     }
 
+    function getSortedSenders() {
+      const sortedSenders = [...senders];
+      sortedSenders.sort((a, b) => {
+        return b.count - a.count;
+      });
+      return sortedSenders;
+    }
+
+    function showSenderColours() {
+      const contentElement = showFilterPopoverAndGetContentElement();
+      const fragment = document.createDocumentFragment();
+      const sortedSenders = getSortedSenders();
+
+      const descriptionElement = document.createElement('p');
+      descriptionElement.innerText = 'Applies a custom colour for the sender if checked.'
+      fragment.appendChild(descriptionElement);
+
+      const toggleContainer = document.createElement('div');
+      toggleContainer.className = 'filter-types-toggle-container';
+      const noneToggle = document.createElement('span');
+      noneToggle.innerText = 'None';
+      noneToggle.onclick = () => {
+        customSenderColours.splice(0, customSenderColours.length);
+        const checkboxes = contentElement.querySelectorAll('input[type=checkbox]');
+        for (const checkbox of checkboxes) {
+          checkbox.checked = false;
+        }
+
+        updateColours();
+      }
+
+      toggleContainer.appendChild(noneToggle);
+      fragment.appendChild(toggleContainer);
+
+      for (const sender of sortedSenders) {
+        const senderColourElement = document.createElement('div');
+        senderColourElement.className = 'filter-message-type-grid hover-highlight';
+        senderColourElement.innerHTML = `
+<label>
+  <input type="checkbox" >
+  <span>${sender.name}</span>
+</label>
+<input type="color">
+        `;
+
+        const checkboxElement = senderColourElement.querySelector('input[type=checkbox]');
+        checkboxElement.checked = !!customSenderColours.find(s => s === sender);
+
+        checkboxElement.addEventListener('click', () => {
+          if (!checkboxElement.checked) {
+            const index = customSenderColours.indexOf(sender);
+            if (index !== -1) {
+              customSenderColours.splice(index, 1);
+            }
+          } else {
+            customSenderColours.push(sender);
+          }
+
+          updateColours();
+        });
+
+        const colorElement = senderColourElement.querySelector('input[type=color]');
+        colorElement.value = sender.customColor;
+        colorElement.addEventListener('input', () => {
+          sender.customColor = colorElement.value;
+          if (!checkboxElement.checked) {
+            checkboxElement.click();
+          }
+
+          updateColours();
+        });
+
+        fragment.appendChild(senderColourElement);
+      }
+      contentElement.appendChild(fragment);
+    }
+
     // ***********************************
     // Chat settings methods
     // ***********************************
     function showChatSettings() {
       const contentElement = showFilterPopoverAndGetContentElement();
-
       const fragment = document.createDocumentFragment();
 
       const settingsContainerElement = document.createElement('div');
@@ -694,16 +800,26 @@
       for (const line of lines) {
         let sender = senders.find((s) => s.name === line.sender);
         if (!sender) {
+          const senderClass = getSenderClass(line.sender);
           sender = {
             name: line.sender,
             count: 0,
             visible: true,
+            class: senderClass,
           };
           senders.push(sender);
         }
 
+        line.senderReference = sender;
         sender.count++;
       }
+    }
+
+    /**
+     * @param {string} sender
+     */
+    function getSenderClass(sender) {
+      return 's-' + sender.toLowerCase().split(' ').join('-');
     }
 
     // *********************************
@@ -715,13 +831,12 @@
     function generateOutput(lines) {
       const parsedLogElement = document.querySelector('.parsed-log');
 
-      const filteredLines = lines.filter(l => {
-        if (!messageTypes[l.code] || !messageTypes[l.code].visible) {
+      const filteredLines = lines.filter(line => {
+        if (!messageTypes[line.code] || !messageTypes[line.code].visible) {
           return false;
         }
 
-        const sender = senders.find(s => s.name === l.sender);
-        if (!senders || !sender.visible) {
+        if (!line.senderReference?.visible) {
           return false;
         }
 
@@ -759,7 +874,7 @@
 
       const message = createLineMessage(line, activeTransformers);
 
-      element.className = `line ${codeClass}`;
+      element.className = `line ${codeClass} ${line.senderReference.class}`;
       element.innerHTML = `<span class="time">[${line.time}]</span> <span class="sender">${prependSender}${line.sender}:</span> <span class="message">${message}</span>`;
       return element;
     }
@@ -768,11 +883,16 @@
       let css = '';
       for (const detail of messageTypesAsArray) {
         css += `
-          .${detail.class} {
-            color: ${detail.color};
-          }
+.${detail.class} { color: ${detail.color}; }
         `;
       }
+
+      for (const sender of customSenderColours) {
+        css += `
+.${sender.class} { color: ${sender.customColor}; }
+        `
+      }
+
       return css;
     }
 
@@ -892,6 +1012,13 @@
         const css = `.${messageType.class} { color: ${messageType.color}; }`;
         style.insertRule(css, index++);
       }
+
+      for (const sender of customSenderColours) {
+        const css = `.${sender.class} { color: ${sender.customColor} }`;
+        style.insertRule(css, index++);
+      }
+
+      generateSaveAsButtons();
     }
 
     // *********************************
