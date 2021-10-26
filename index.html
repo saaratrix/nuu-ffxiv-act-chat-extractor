@@ -164,7 +164,10 @@
 </head>
 <body>
 <section class="log-parser">
-  <h1>Select your log.</h1>
+  <h1 style="margin: 5px 0">Select your log.</h1>
+  <p style="margin: 5px 0">
+    You can remove lines by pressing delete or backspace.
+  </p>
   <input id="loginput" type="file">
   <p id="error"></p>
 </section>
@@ -197,7 +200,7 @@
      * message: "Nuusie gives Tiggy a big bonk."
      * sender: "Nuusie"
      * time: "20:49:41"
-     * @typedef {{ code: string, message: string, sender: string, time: string, senderReference: Sender }} Line
+     * @typedef {{ code: string, message: string, sender: string, time: string, senderReference: Sender, id: string }} Line
      */
 
     /**
@@ -382,6 +385,8 @@
           closeFilterPopover();
         }
       });
+
+      document.addEventListener('keyup', (event) => tryRemoveSelectedText(event));
 
       // If you don't have hover capabilities we need to always update the blobs.
       // The chance of someone using this from a touchscreen only is rather low though but you never know!
@@ -967,6 +972,7 @@
       // We group all the errors so we only do 1 single console.log()
       const errors = {};
 
+      let index = 0;
       for (const line of lines) {
         const match = line.match(messageRegex);
         if (!match || !match.groups) {
@@ -995,6 +1001,8 @@
           continue;
         }
 
+        item.id = index.toString();
+        index++;
         result.push(item);
       }
 
@@ -1097,6 +1105,7 @@
       const message = createLineMessage(line, activeTransformers);
 
       element.className = `line ${codeClass} ${line.senderReference.class}`;
+      element.dataset['id'] = line.id;
       element.innerHTML = `<span class="time">[${line.time}]</span> <span class="sender">${prependSender}${line.sender}:</span> <span class="message">${message}</span>`;
       return element;
     }
@@ -1333,6 +1342,94 @@
 
       return output;
     }
+
+    // ***************************
+    // Misc. Functionality
+    // ***************************
+
+    /**
+     *
+     * @param {KeyboardEvent} event
+     */
+    function tryRemoveSelectedText(event) {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') {
+        return;
+      }
+
+      const selection = document.getSelection();
+      if (!selection.rangeCount) {
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      const outputElement = document.getElementById('output');
+      const errorElement = document.getElementById('error');
+      if (!range.commonAncestorContainer !== outputElement && !outputElement.contains(range.commonAncestorContainer)) {
+        errorElement.innerText = `Can't remove selected text because it's not only the output.`;
+        // This is a horrible solution but better than nothing.
+        setTimeout(() => {
+          errorElement.innerText = '';
+        }, 5000)
+        return;
+      }
+
+      errorElement.innerText = '';
+      const focusLine = getLineElementFromSelectionNode(selection.focusNode);
+      const anchorLine = getLineElementFromSelectionNode(selection.anchorNode);
+
+      if (!focusLine || !anchorLine) {
+        return;
+      }
+
+      let focusLineNumber = parseInt(focusLine.dataset['id'], 10);
+      let anchorLineNumber = parseInt(anchorLine.dataset['id'], 10);
+
+      if (isNaN(focusLineNumber) || isNaN(anchorLineNumber)) {
+        return;
+      }
+
+      const from = focusLineNumber <= anchorLineNumber ? focusLine : anchorLine;
+      const to = focusLineNumber >= anchorLineNumber ? focusLine : anchorLine;
+      let removeLines = false;
+
+      // There can be hidden lines so we need to get them index by index.
+      for (let i = outputElement.children.length - 1; i >= 0; i--) {
+        const child = outputElement.children[i];
+        if (!child.classList.contains('line')) {
+          continue;
+        }
+
+        if (child === to) {
+          removeLines = true;
+        }
+
+        if (removeLines) {
+          const id = child.dataset['id'];
+          const index = currentParsedLines.findIndex(l => l.id === id);
+          currentParsedLines.splice(index, 1);
+          outputElement.removeChild(child);
+        }
+
+        if (child === from) {
+          break;
+        }
+      }
+
+      generateOutput(currentParsedLines);
+    }
+
+    function getLineElementFromSelectionNode(node) {
+      while (node.parentNode) {
+        if (node.classList?.contains('line')) {
+          return node;
+        }
+
+        node = node.parentNode;
+      }
+
+      return undefined;
+    }
+
   })();
 </script>
 </body>
