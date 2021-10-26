@@ -32,7 +32,6 @@
     }
 
     .filter {
-      position: relative;
       display: flex;
       gap: 0.5rem;
 
@@ -49,7 +48,7 @@
     #filter-popover {
       position: absolute;
       z-index: 10;
-      max-width: 300px;
+      max-width: 375px;
       padding: 0.5rem;
       background-color: var(--color-popover-background);
       border: 1px solid var(--color-light-hsl);
@@ -166,7 +165,7 @@
 <section class="log-parser">
   <h1 style="margin: 5px 0">Select your log.</h1>
   <p style="margin: 5px 0">
-    You can remove lines by pressing delete or backspace.
+    You can remove selected lines from the output by pressing delete or backspace.
   </p>
   <input id="loginput" type="file">
   <p id="error"></p>
@@ -331,10 +330,10 @@
      */
     let filterPopoverElement;
     const popoverOpeners = {
-      filterTypes: 'filterTypes',
-      filterSenders: 'filterSenders',
-      senderColours: 'senderColours',
-      chatSettings: 'chatSettings',
+      filterTypes: '.filter-types',
+      filterSenders: '.filter-senders',
+      senderColours: '.sender-colours',
+      chatSettings: '.chat-settings',
     }
     let lastPopoverOpener = '';
     let logFilename = '';
@@ -548,7 +547,23 @@
       clearFilterPopover();
       filterPopoverElement.style.display = '';
       lastPopoverOpener = opener;
-      return filterPopoverElement.querySelector('.filter-popover-content');;
+      const popoverContent = filterPopoverElement.querySelector('.filter-popover-content');
+
+      /**
+       * @type {HTMLElement}
+       */
+      const openerElement = document.querySelector(opener);
+      if (!openerElement) {
+        return popoverContent;
+      }
+
+      const filterRootElement = document.querySelector('.filter');
+      const bounds = openerElement.getBoundingClientRect();
+      const filterBounds = filterRootElement.getBoundingClientRect();
+      filterPopoverElement.style.left = `${bounds.left}px`;
+      filterPopoverElement.style.top = `${filterBounds.bottom + 5}px`;
+
+      return popoverContent;
     }
 
     function closeFilterPopover() {
