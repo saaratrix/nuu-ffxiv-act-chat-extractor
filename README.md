@@ -14,7 +14,7 @@ You can also use the application directly here: https://saaratrix.github.io/nuu-
 ----
 How it looks like:
 
-![image](https://user-images.githubusercontent.com/16946048/136702736-59b35614-70df-4e01-9253-8c4a0292ba7d.png)
+![image](https://user-images.githubusercontent.com/16946048/138957510-7879b850-9cc5-45d1-9ed9-4dcd2ea44a75.png)
 ![image](https://user-images.githubusercontent.com/16946048/132962660-8a319c7e-2b5f-4985-8bce-5e88d99d9346.png)
 ![image](https://user-images.githubusercontent.com/16946048/132962667-e09a2a7a-8076-47f5-b8e5-a74b301d4028.png)
 
