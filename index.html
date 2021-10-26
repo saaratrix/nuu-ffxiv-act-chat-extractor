@@ -32,7 +32,6 @@
     }
 
     .filter {
-      position: relative;
       display: flex;
       gap: 0.5rem;
 
@@ -49,7 +48,7 @@
     #filter-popover {
       position: absolute;
       z-index: 10;
-      max-width: 300px;
+      max-width: 375px;
       padding: 0.5rem;
       background-color: var(--color-popover-background);
       border: 1px solid var(--color-light-hsl);
@@ -164,7 +163,10 @@
 </head>
 <body>
 <section class="log-parser">
-  <h1>Select your log.</h1>
+  <h1 style="margin: 5px 0">Select your log.</h1>
+  <p style="margin: 5px 0">
+    You can remove selected lines from the output by pressing delete or backspace.
+  </p>
   <input id="loginput" type="file">
   <p id="error"></p>
 </section>
@@ -179,7 +181,7 @@
       <button class="sender-colours">Sender Colours</button>
       <button class="chat-settings">Chat settings</button>
       <div id="filter-popover" style="display: none;">
-        <button onclick="closeFilterPopover()">Close</button>
+        <button class="popover-close-button">Close</button>
         <!-- The content is dynamically added by showFilterTypes, showFilterSenders, sender colours and chat settingsi -->
         <div class="filter-popover-content"></div>
       </div>
@@ -189,16 +191,6 @@
 </section>
 
 <script type="text/javascript">
-  function closeFilterPopover() {
-    const filterPopoverElement = document.getElementById('filter-popover');
-    filterPopoverElement.style.display = 'none';
-
-    const contentElement = filterPopoverElement.querySelector('.filter-popover-content');
-    while (contentElement.firstChild) {
-      contentElement.removeChild(contentElement.firstChild);
-    }
-  }
-
   // Auto calling function for its own scope.
   (function() {
     /**
@@ -207,7 +199,7 @@
      * message: "Nuusie gives Tiggy a big bonk."
      * sender: "Nuusie"
      * time: "20:49:41"
-     * @typedef {{ code: string, message: string, sender: string, time: string, senderReference: Sender }} Line
+     * @typedef {{ code: string, message: string, sender: string, time: string, senderReference: Sender, id: string }} Line
      */
 
     /**
@@ -224,6 +216,10 @@
 
     /**
      * @typedef {{ text: string, transform: boolean }} TextMatchPart
+     */
+
+    /**
+     * @typedef {{ opening: string, closing: string[] }} QuotationRule
      */
 
     // Regexes from https://github.com/ErstonGreatman/ffxiv-act-chat-extractor
@@ -292,10 +288,36 @@
      */
     const senders = [];
 
+    // List of quotation rules: https://en.wikipedia.org/wiki/Quotation_mark
+    // Total unique characters: `'"‚„‘“’«‹›»〈《「『”〉》」』
+    /**
+     * @type {QuotationRule[]}
+     */
+    const quotationRules = [
+      { opening: '`', closing: ['`'] },
+      { opening: '#039;', closing: ['#039;'] },
+      { opening: '&quot;', closing: ['&quot;'] },
+      { opening: '‚', closing: ['‘', '’'] },
+      { opening: '„', closing: ['“'] },
+      { opening: '‘', closing: ['’'] },
+      { opening: '“', closing: ['”'] },
+      { opening: '’', closing: ['’'] },
+      { opening: '‹', closing: ['›'] },
+      { opening: '〈', closing: ['〉'] },
+      { opening: '«', closing: ['»'] },
+      { opening: '《', closing: ['》'] },
+      { opening: '›', closing: ['‹'] },
+      { opening: '»', closing: ['«', '»'] },
+      { opening: '「', closing: ['」'] },
+      { opening: '『', closing: ['』'] },
+    ];
+
     /**
      * @type {TextTransformer[]}
      */
     const transformTextRules = [
+      { codes: ['001c', '001d'], name: 'Always show emote colour', regex: /.*/gm, active: true, method: transformTextToEmoteText },
+      { codes: ['001c', '001d'], name: 'Quotes in emotes as say', customMatcher: getQuotationMatches, active: true, method: transformQuotesToSayOrCustomSender },
       { codes: ['*'], name: 'Asterisks as emote', regex: /\*[^\*]+\*/gm, active: true, method: transformAsterisksAsEmote },
       { codes: ['*'], name: '( Out of character )', customMatcher: getOutOfCharacterMatches, regex: /\([^\)]+\)/, active: true, method: transformOutOfCharacter },
       // { codes: ['*'], excludeCodes: ['001c', '001d'], name: 'Treat non-quoted text as emote', regex: '', active: false },
@@ -307,6 +329,13 @@
      * @type {HTMLElement}
      */
     let filterPopoverElement;
+    const popoverOpeners = {
+      filterTypes: '.filter-types',
+      filterSenders: '.filter-senders',
+      senderColours: '.sender-colours',
+      chatSettings: '.chat-settings',
+    }
+    let lastPopoverOpener = '';
     let logFilename = '';
     let existingObjectURLs = [];
 
@@ -329,10 +358,16 @@
       chatSettingsElement.addEventListener('click', showChatSettings);
 
       filterPopoverElement = document.getElementById('filter-popover');
+      const closeButtonElement = filterPopoverElement.querySelector('.popover-close-button');
+      closeButtonElement.addEventListener('click', closeFilterPopover);
 
       logInput.addEventListener('change', handleLogUpload, false);
 
       document.addEventListener('click', (event) => {
+        if (lastPopoverOpener === '') {
+          return;
+        }
+
         let closePopup = true;
         let target = event.target;
         while (target) {
@@ -345,9 +380,12 @@
         }
 
         if (closePopup) {
+          console.log('closing popover');
           closeFilterPopover();
         }
       });
+
+      document.addEventListener('keyup', (event) => tryRemoveSelectedText(event));
 
       // If you don't have hover capabilities we need to always update the blobs.
       // The chance of someone using this from a touchscreen only is rather low though but you never know!
@@ -368,7 +406,12 @@
     // FILTER methods
     // ******************************************
     function showFilterTypes() {
-      const contentElement = showFilterPopoverAndGetContentElement();
+      if (lastPopoverOpener === popoverOpeners.filterTypes) {
+        closeFilterPopover();
+        return;
+      }
+
+      const contentElement = showFilterPopoverAndGetContentElement(popoverOpeners.filterTypes);
       const fragment = document.createDocumentFragment();
 
       addTypesToggle(fragment, messageTypesAsArray, '.filter-message-type input[type=checkbox]');
@@ -418,8 +461,12 @@
     }
 
     function showFilterSenders() {
-      const contentElement = showFilterPopoverAndGetContentElement();
+      if (lastPopoverOpener === popoverOpeners.filterSenders) {
+        closeFilterPopover();
+        return;
+      }
 
+      const contentElement = showFilterPopoverAndGetContentElement(popoverOpeners.filterSenders);
       const fragment = document.createDocumentFragment();
 
       const sortedSenders = getSortedSenders();
@@ -496,10 +543,38 @@
       }
     }
 
-    function showFilterPopoverAndGetContentElement() {
+    function showFilterPopoverAndGetContentElement(opener) {
       clearFilterPopover();
       filterPopoverElement.style.display = '';
-      return filterPopoverElement.querySelector('.filter-popover-content');;
+      lastPopoverOpener = opener;
+      const popoverContent = filterPopoverElement.querySelector('.filter-popover-content');
+
+      /**
+       * @type {HTMLElement}
+       */
+      const openerElement = document.querySelector(opener);
+      if (!openerElement) {
+        return popoverContent;
+      }
+
+      const filterRootElement = document.querySelector('.filter');
+      const bounds = openerElement.getBoundingClientRect();
+      const filterBounds = filterRootElement.getBoundingClientRect();
+      filterPopoverElement.style.left = `${bounds.left}px`;
+      filterPopoverElement.style.top = `${filterBounds.bottom + 5}px`;
+
+      return popoverContent;
+    }
+
+    function closeFilterPopover() {
+      lastPopoverOpener = '';
+      const filterPopoverElement = document.getElementById('filter-popover');
+      filterPopoverElement.style.display = 'none';
+
+      const contentElement = filterPopoverElement.querySelector('.filter-popover-content');
+      while (contentElement.firstChild) {
+        contentElement.removeChild(contentElement.firstChild);
+      }
     }
 
     function clearFilterPopover() {
@@ -519,7 +594,12 @@
     }
 
     function showSenderColours() {
-      const contentElement = showFilterPopoverAndGetContentElement();
+      if (lastPopoverOpener === popoverOpeners.senderColours) {
+        closeFilterPopover();
+        return;
+      }
+
+      const contentElement = showFilterPopoverAndGetContentElement(popoverOpeners.senderColours);
       const fragment = document.createDocumentFragment();
       const sortedSenders = getSortedSenders();
 
@@ -534,8 +614,16 @@
       noneToggle.onclick = () => {
         customSenderColours.splice(0, customSenderColours.length);
         const checkboxes = contentElement.querySelectorAll('input[type=checkbox]');
+        let hasChanges = false;
         for (const checkbox of checkboxes) {
+          if (checkbox.checked) {
+            hasChanges = true;
+          }
           checkbox.checked = false;
+        }
+
+        if (hasChanges) {
+          generateOutput(currentParsedLines);
         }
 
         updateColours();
@@ -571,6 +659,14 @@
           updateColours();
         });
 
+        // This seems to be fine even with the None click that only 1 event happens.
+        // Otherwise we probably need a debounce.
+        checkboxElement.addEventListener('change', () => {
+          requestAnimationFrame(() => {
+            generateOutput(currentParsedLines);
+          });
+        });
+
         const colorElement = senderColourElement.querySelector('input[type=color]');
         colorElement.value = sender.customColor;
         colorElement.addEventListener('input', () => {
@@ -591,12 +687,27 @@
     // Chat settings methods
     // ***********************************
     function showChatSettings() {
-      const contentElement = showFilterPopoverAndGetContentElement();
+      if (lastPopoverOpener === popoverOpeners.chatSettings) {
+        closeFilterPopover();
+        return;
+      }
+      const contentElement = showFilterPopoverAndGetContentElement(popoverOpeners.chatSettings);
       const fragment = document.createDocumentFragment();
 
       const settingsContainerElement = document.createElement('div');
       settingsContainerElement.className = 'chat-settings-popover-container';
 
+      addTransformRulesToChatSettings(settingsContainerElement);
+
+      fragment.appendChild(settingsContainerElement);
+
+      contentElement.appendChild(fragment);
+    }
+
+    /**
+     * @param {HTMLElement} settingsContainerElement
+     */
+    function addTransformRulesToChatSettings(settingsContainerElement) {
       for (const rule of transformTextRules) {
         const ruleElement = document.createElement('div');
         ruleElement.className = 'chat-setting hover-highlight';
@@ -619,20 +730,35 @@
 
         settingsContainerElement.appendChild(ruleElement);
       }
-
-      fragment.appendChild(settingsContainerElement);
-
-      contentElement.appendChild(fragment);
     }
 
     // ***********************************
     // Transform Text methods
+    // called inside tryTransformText()
     // ***********************************
 
     /**
      * @param {TextMatchPart[]} textParts
+     * @param {Line} line
      */
-    function transformAsterisksAsEmote(textParts) {
+    function transformTextToEmoteText(textParts, line) {
+      let text = '';
+      for (const part of textParts) {
+        if (!part.transform) {
+          text += part.text;
+        }
+        const className = messageTypes['001c'].class;
+        text += `<span class="${className}">${part.text}</span>`;
+      }
+
+      return text;
+    }
+
+    /**
+     * @param {TextMatchPart[]} textParts
+     * @param {Line} line
+     */
+    function transformAsterisksAsEmote(textParts, line) {
       let text = '';
       for (const part of textParts) {
         if (!part.transform) {
@@ -647,15 +773,114 @@
     }
 
     /**
+     * @param {TextMatchPart[]} textParts
+     * @param {Line} line
+     */
+    function transformQuotesToSayOrCustomSender(textParts, line) {
+      let text = '';
+      for (const part of textParts) {
+        if (!part.transform) {
+          text += part.text;
+        } else {
+          let className;
+          if (customSenderColours.indexOf(line.senderReference) !== -1) {
+            className = line.senderReference.class;
+          } else {
+            className = messageTypes['000a'].class;
+          }
+          text += `<span class="${className}">${part.text}</span>`;
+        }
+      }
+
+      return text;
+    }
+
+    /**
+     * @param {TextMatchPart[]} textParts
+     * @param {Line} line
+     */
+    function transformOutOfCharacter(textParts, line) {
+      let text = '';
+      for (const part of textParts) {
+        if (!part.transform) {
+          text += part.text;
+        } else {
+          text += `<span style="opacity: 0.8">${part.text}</span>`;
+        }
+      }
+
+      return text;
+    }
+
+    // *************************************
+    // Transformer Matching methods
+    // *************************************
+    /**
      * @param {string} text
      * @param {TextTransformer} transformer
+     * @returns {RegExpMatchArray[]}
+     */
+    function getQuotationMatches(text, transformer) {
+      let matches = [];
+      let currentIndex = 0;
+
+      while (currentIndex < text.length) {
+        const nextIndices = getNextQuotationIndices(text, currentIndex);
+        if (!nextIndices) {
+          break;
+        }
+
+        const match = [text.substr(nextIndices.openingIndex, nextIndices.closingIndex - nextIndices.openingIndex)];
+        match.index = nextIndices.openingIndex;
+        matches.push(match);
+        currentIndex = nextIndices.closingIndex;
+      }
+
+      return matches;
+    }
+
+    /**
+     * @returns {{ openingIndex: number, closingIndex: number } | undefined}
+     */
+    function getNextQuotationIndices(text, currentIndex) {
+      const quotations = [];
+
+      for (const quotationRule of quotationRules) {
+        const openingIndex = text.indexOf(quotationRule.opening, currentIndex);
+        if (openingIndex === -1) {
+          continue;
+        }
+
+        for (const closingCharacter of quotationRule.closing) {
+          const closingIndex = text.indexOf(closingCharacter, openingIndex + 1);
+          if (closingIndex !== -1) {
+            quotations.push({
+              openingIndex,
+              closingIndex: closingIndex + closingCharacter.length,
+            });
+          }
+        }
+      }
+
+      if (!quotations.length) {
+        return undefined;
+      }
+
+      quotations.sort((a, b) => a.openingIndex - b.openingIndex);
+      return quotations[0];
+    }
+
+    /**
+     * @param {string} text
+     * @param {TextTransformer} transformer
+     * @returns {RegExpMatchArray[]}
      */
     function getOutOfCharacterMatches(text, transformer) {
       let matches = [];
 
       const firstIndex = text.indexOf('(');
       if (firstIndex === -1 || text.indexOf(')', firstIndex) === -1) {
-
+        return matches;
       }
       if (!transformer.regex.test(text)) {
         return matches;
@@ -699,21 +924,6 @@
       return matches;
     }
 
-    /**
-     * @param {TextMatchPart[]} textParts
-     */
-    function transformOutOfCharacter(textParts) {
-      let text = '';
-      for (const part of textParts) {
-        if (!part.transform) {
-          text += part.text;
-        } else {
-          text += `<span style="opacity: 0.8">${part.text}</span>`;
-        }
-      }
-
-      return text;
-    }
 
     // ***********************************
     // Parsing methods
@@ -777,6 +987,7 @@
       // We group all the errors so we only do 1 single console.log()
       const errors = {};
 
+      let index = 0;
       for (const line of lines) {
         const match = line.match(messageRegex);
         if (!match || !match.groups) {
@@ -805,6 +1016,8 @@
           continue;
         }
 
+        item.id = index.toString();
+        index++;
         result.push(item);
       }
 
@@ -907,10 +1120,14 @@
       const message = createLineMessage(line, activeTransformers);
 
       element.className = `line ${codeClass} ${line.senderReference.class}`;
+      element.dataset['id'] = line.id;
       element.innerHTML = `<span class="time">[${line.time}]</span> <span class="sender">${prependSender}${line.sender}:</span> <span class="message">${message}</span>`;
       return element;
     }
 
+    /**
+     * Create the CSS by adding the colours for the message types and custom senders.
+     */
     function createCSS() {
       let css = '';
       for (const detail of messageTypesAsArray) {
@@ -939,7 +1156,7 @@
 
       let message = line.message;
       for (const transformer of activeTransformers) {
-        message = tryTransformText(message, transformer, line.code);
+        message = tryTransformText(message, transformer, line);
       }
 
       return message;
@@ -948,9 +1165,9 @@
     /**
      * @param {string} text
      * @param {TextTransformer} transformer
-     * @param {string} lineCode
+     * @param {Line} line
      */
-    function tryTransformText(text, transformer, lineCode) {
+    function tryTransformText(text, transformer, line) {
       let canTransform = false;
       for (const code of transformer.codes) {
         if (code === '*') {
@@ -958,7 +1175,7 @@
           break;
         }
 
-        if (code === lineCode) {
+        if (code === line.code) {
           canTransform = true;
           break;
         }
@@ -973,7 +1190,7 @@
         return text;
       }
 
-      return transformer.method(matchedText);
+      return transformer.method(matchedText, line);
     }
 
     /**
@@ -988,6 +1205,7 @@
         matches = transformer.customMatcher(text, transformer);
       } else if (transformer.regex) {
         matches = [...text.matchAll(transformer.regex)];
+        matches = matches.filter(m => m[0]);
       }
 
       if (!matches?.length) {
@@ -1139,6 +1357,94 @@
 
       return output;
     }
+
+    // ***************************
+    // Misc. Functionality
+    // ***************************
+
+    /**
+     *
+     * @param {KeyboardEvent} event
+     */
+    function tryRemoveSelectedText(event) {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') {
+        return;
+      }
+
+      const selection = document.getSelection();
+      if (!selection.rangeCount) {
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      const outputElement = document.getElementById('output');
+      const errorElement = document.getElementById('error');
+      if (!range.commonAncestorContainer !== outputElement && !outputElement.contains(range.commonAncestorContainer)) {
+        errorElement.innerText = `Can't remove selected text because it's not only the output.`;
+        // This is a horrible solution but better than nothing.
+        setTimeout(() => {
+          errorElement.innerText = '';
+        }, 5000)
+        return;
+      }
+
+      errorElement.innerText = '';
+      const focusLine = getLineElementFromSelectionNode(selection.focusNode);
+      const anchorLine = getLineElementFromSelectionNode(selection.anchorNode);
+
+      if (!focusLine || !anchorLine) {
+        return;
+      }
+
+      let focusLineNumber = parseInt(focusLine.dataset['id'], 10);
+      let anchorLineNumber = parseInt(anchorLine.dataset['id'], 10);
+
+      if (isNaN(focusLineNumber) || isNaN(anchorLineNumber)) {
+        return;
+      }
+
+      const from = focusLineNumber <= anchorLineNumber ? focusLine : anchorLine;
+      const to = focusLineNumber >= anchorLineNumber ? focusLine : anchorLine;
+      let removeLines = false;
+
+      // There can be hidden lines so we need to get them index by index.
+      for (let i = outputElement.children.length - 1; i >= 0; i--) {
+        const child = outputElement.children[i];
+        if (!child.classList.contains('line')) {
+          continue;
+        }
+
+        if (child === to) {
+          removeLines = true;
+        }
+
+        if (removeLines) {
+          const id = child.dataset['id'];
+          const index = currentParsedLines.findIndex(l => l.id === id);
+          currentParsedLines.splice(index, 1);
+          outputElement.removeChild(child);
+        }
+
+        if (child === from) {
+          break;
+        }
+      }
+
+      generateOutput(currentParsedLines);
+    }
+
+    function getLineElementFromSelectionNode(node) {
+      while (node.parentNode) {
+        if (node.classList?.contains('line')) {
+          return node;
+        }
+
+        node = node.parentNode;
+      }
+
+      return undefined;
+    }
+
   })();
 </script>
 </body>
