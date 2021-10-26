@@ -6,10 +6,10 @@ It supports highlighting certain styles of RP formatted text.
 For example inline emotes and out of character text.
 ![image](https://user-images.githubusercontent.com/16946048/135769339-64f9a416-8adf-45de-90ba-712557f3306a.png)
 
-This application is created as a standalone HTML page, so you can download the index.html file and run it locally and then select your chat logs you want to save.
+This application is created as a standalone HTML page, so you can download the nuu-ffxiv-chat.html file and run it locally and then select your chat logs you want to save.
 
 ----
-You can also use the application directly here: https://saaratrix.github.io/nuu-ffxiv-act-chat-extractor/ 
+You can also use the application directly here: https://saaratrix.github.io/nuu-ffxiv-act-chat-extractor/nuu-ffxiv-chat.html 
 
 ----
 How it looks like:
