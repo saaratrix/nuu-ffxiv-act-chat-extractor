@@ -286,6 +286,7 @@
      * @type {TextTransformer[]}
      */
     const transformTextRules = [
+      { codes: ['001c', '001d'], name: 'Always show emote colour', regex: /.*/gm, active: true, method: transformTextToEmoteText },
       { codes: ['*'], name: 'Asterisks as emote', regex: /\*[^\*]+\*/gm, active: true, method: transformAsterisksAsEmote },
       { codes: ['*'], name: '( Out of character )', customMatcher: getOutOfCharacterMatches, regex: /\([^\)]+\)/, active: true, method: transformOutOfCharacter },
       // { codes: ['*'], excludeCodes: ['001c', '001d'], name: 'Treat non-quoted text as emote', regex: '', active: false },
@@ -631,6 +632,17 @@
       const settingsContainerElement = document.createElement('div');
       settingsContainerElement.className = 'chat-settings-popover-container';
 
+      addTransformRulesToChatSettings(settingsContainerElement);
+
+      fragment.appendChild(settingsContainerElement);
+
+      contentElement.appendChild(fragment);
+    }
+
+    /**
+     * @param {HTMLElement} settingsContainerElement
+     */
+    function addTransformRulesToChatSettings(settingsContainerElement) {
       for (const rule of transformTextRules) {
         const ruleElement = document.createElement('div');
         ruleElement.className = 'chat-setting hover-highlight';
@@ -653,15 +665,27 @@
 
         settingsContainerElement.appendChild(ruleElement);
       }
-
-      fragment.appendChild(settingsContainerElement);
-
-      contentElement.appendChild(fragment);
     }
 
     // ***********************************
     // Transform Text methods
     // ***********************************
+
+    /**
+     * @param {TextMatchPart[]} textParts
+     */
+    function transformTextToEmoteText(textParts) {
+      let text = '';
+      for (const part of textParts) {
+        if (!part.transform) {
+          text += part.text;
+        }
+        const className = messageTypes['001c'].class;
+        text += `<span class="${className}">${part.text}</span>`;
+      }
+
+      return text;
+    }
 
     /**
      * @param {TextMatchPart[]} textParts
@@ -683,13 +707,14 @@
     /**
      * @param {string} text
      * @param {TextTransformer} transformer
+     * @returns {RegExpMatchArray[]}
      */
     function getOutOfCharacterMatches(text, transformer) {
       let matches = [];
 
       const firstIndex = text.indexOf('(');
       if (firstIndex === -1 || text.indexOf(')', firstIndex) === -1) {
-
+        return matches;
       }
       if (!transformer.regex.test(text)) {
         return matches;
@@ -945,6 +970,9 @@
       return element;
     }
 
+    /**
+     * Create the CSS by adding the colours for the message types and custom senders.
+     */
     function createCSS() {
       let css = '';
       for (const detail of messageTypesAsArray) {
