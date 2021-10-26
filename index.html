@@ -179,7 +179,7 @@
       <button class="sender-colours">Sender Colours</button>
       <button class="chat-settings">Chat settings</button>
       <div id="filter-popover" style="display: none;">
-        <button onclick="closeFilterPopover()">Close</button>
+        <button class="popover-close-button">Close</button>
         <!-- The content is dynamically added by showFilterTypes, showFilterSenders, sender colours and chat settingsi -->
         <div class="filter-popover-content"></div>
       </div>
@@ -189,16 +189,6 @@
 </section>
 
 <script type="text/javascript">
-  function closeFilterPopover() {
-    const filterPopoverElement = document.getElementById('filter-popover');
-    filterPopoverElement.style.display = 'none';
-
-    const contentElement = filterPopoverElement.querySelector('.filter-popover-content');
-    while (contentElement.firstChild) {
-      contentElement.removeChild(contentElement.firstChild);
-    }
-  }
-
   // Auto calling function for its own scope.
   (function() {
     /**
@@ -307,6 +297,13 @@
      * @type {HTMLElement}
      */
     let filterPopoverElement;
+    const popoverOpeners = {
+      filterTypes: 'filterTypes',
+      filterSenders: 'filterSenders',
+      senderColours: 'senderColours',
+      chatSettings: 'chatSettings',
+    }
+    let lastPopoverOpener = '';
     let logFilename = '';
     let existingObjectURLs = [];
 
@@ -329,10 +326,16 @@
       chatSettingsElement.addEventListener('click', showChatSettings);
 
       filterPopoverElement = document.getElementById('filter-popover');
+      const closeButtonElement = filterPopoverElement.querySelector('.popover-close-button');
+      closeButtonElement.addEventListener('click', closeFilterPopover);
 
       logInput.addEventListener('change', handleLogUpload, false);
 
       document.addEventListener('click', (event) => {
+        if (lastPopoverOpener === '') {
+          return;
+        }
+
         let closePopup = true;
         let target = event.target;
         while (target) {
@@ -345,6 +348,7 @@
         }
 
         if (closePopup) {
+          console.log('closing popover');
           closeFilterPopover();
         }
       });
@@ -368,7 +372,12 @@
     // FILTER methods
     // ******************************************
     function showFilterTypes() {
-      const contentElement = showFilterPopoverAndGetContentElement();
+      if (lastPopoverOpener === popoverOpeners.filterTypes) {
+        closeFilterPopover();
+        return;
+      }
+
+      const contentElement = showFilterPopoverAndGetContentElement(popoverOpeners.filterTypes);
       const fragment = document.createDocumentFragment();
 
       addTypesToggle(fragment, messageTypesAsArray, '.filter-message-type input[type=checkbox]');
@@ -418,8 +427,12 @@
     }
 
     function showFilterSenders() {
-      const contentElement = showFilterPopoverAndGetContentElement();
+      if (lastPopoverOpener === popoverOpeners.filterSenders) {
+        closeFilterPopover();
+        return;
+      }
 
+      const contentElement = showFilterPopoverAndGetContentElement(popoverOpeners.filterSenders);
       const fragment = document.createDocumentFragment();
 
       const sortedSenders = getSortedSenders();
@@ -496,10 +509,22 @@
       }
     }
 
-    function showFilterPopoverAndGetContentElement() {
+    function showFilterPopoverAndGetContentElement(opener) {
       clearFilterPopover();
       filterPopoverElement.style.display = '';
+      lastPopoverOpener = opener;
       return filterPopoverElement.querySelector('.filter-popover-content');;
+    }
+
+    function closeFilterPopover() {
+      lastPopoverOpener = '';
+      const filterPopoverElement = document.getElementById('filter-popover');
+      filterPopoverElement.style.display = 'none';
+
+      const contentElement = filterPopoverElement.querySelector('.filter-popover-content');
+      while (contentElement.firstChild) {
+        contentElement.removeChild(contentElement.firstChild);
+      }
     }
 
     function clearFilterPopover() {
@@ -519,7 +544,12 @@
     }
 
     function showSenderColours() {
-      const contentElement = showFilterPopoverAndGetContentElement();
+      if (lastPopoverOpener === popoverOpeners.senderColours) {
+        closeFilterPopover();
+        return;
+      }
+
+      const contentElement = showFilterPopoverAndGetContentElement(popoverOpeners.senderColours);
       const fragment = document.createDocumentFragment();
       const sortedSenders = getSortedSenders();
 
@@ -591,7 +621,11 @@
     // Chat settings methods
     // ***********************************
     function showChatSettings() {
-      const contentElement = showFilterPopoverAndGetContentElement();
+      if (lastPopoverOpener === popoverOpeners.chatSettings) {
+        closeFilterPopover();
+        return;
+      }
+      const contentElement = showFilterPopoverAndGetContentElement(popoverOpeners.chatSettings);
       const fragment = document.createDocumentFragment();
 
       const settingsContainerElement = document.createElement('div');
