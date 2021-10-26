@@ -216,6 +216,10 @@
      * @typedef {{ text: string, transform: boolean }} TextMatchPart
      */
 
+    /**
+     * @typedef {{ opening: string, closing: string[] }} QuotationRule
+     */
+
     // Regexes from https://github.com/ErstonGreatman/ffxiv-act-chat-extractor
     // This one has 2 groups, name & realm.
     const nameRegex = /(?<name>[A-Z][a-z']+\s[A-Z][a-z']+)(?<realm>[A-Z][a-z]+)?/;
@@ -282,11 +286,36 @@
      */
     const senders = [];
 
+    // List of quotation rules: https://en.wikipedia.org/wiki/Quotation_mark
+    // Total unique characters: `'"‚„‘“’«‹›»〈《「『”〉》」』
+    /**
+     * @type {QuotationRule[]}
+     */
+    const quotationRules = [
+      { opening: '`', closing: ['`'] },
+      { opening: '#039;', closing: ['#039;'] },
+      { opening: '&quot;', closing: ['&quot;'] },
+      { opening: '‚', closing: ['‘', '’'] },
+      { opening: '„', closing: ['“'] },
+      { opening: '‘', closing: ['’'] },
+      { opening: '“', closing: ['”'] },
+      { opening: '’', closing: ['’'] },
+      { opening: '‹', closing: ['›'] },
+      { opening: '〈', closing: ['〉'] },
+      { opening: '«', closing: ['»'] },
+      { opening: '《', closing: ['》'] },
+      { opening: '›', closing: ['‹'] },
+      { opening: '»', closing: ['«', '»'] },
+      { opening: '「', closing: ['」'] },
+      { opening: '『', closing: ['』'] },
+    ];
+
     /**
      * @type {TextTransformer[]}
      */
     const transformTextRules = [
       { codes: ['001c', '001d'], name: 'Always show emote colour', regex: /.*/gm, active: true, method: transformTextToEmoteText },
+      { codes: ['001c', '001d'], name: 'Quotes in emotes as say', customMatcher: getQuotationMatches, active: true, method: transformQuotesToSayOrCustomSender },
       { codes: ['*'], name: 'Asterisks as emote', regex: /\*[^\*]+\*/gm, active: true, method: transformAsterisksAsEmote },
       { codes: ['*'], name: '( Out of character )', customMatcher: getOutOfCharacterMatches, regex: /\([^\)]+\)/, active: true, method: transformOutOfCharacter },
       // { codes: ['*'], excludeCodes: ['001c', '001d'], name: 'Treat non-quoted text as emote', regex: '', active: false },
@@ -565,8 +594,16 @@
       noneToggle.onclick = () => {
         customSenderColours.splice(0, customSenderColours.length);
         const checkboxes = contentElement.querySelectorAll('input[type=checkbox]');
+        let hasChanges = false;
         for (const checkbox of checkboxes) {
+          if (checkbox.checked) {
+            hasChanges = true;
+          }
           checkbox.checked = false;
+        }
+
+        if (hasChanges) {
+          generateOutput(currentParsedLines);
         }
 
         updateColours();
@@ -600,6 +637,14 @@
           }
 
           updateColours();
+        });
+
+        // This seems to be fine even with the None click that only 1 event happens.
+        // Otherwise we probably need a debounce.
+        checkboxElement.addEventListener('change', () => {
+          requestAnimationFrame(() => {
+            generateOutput(currentParsedLines);
+          });
         });
 
         const colorElement = senderColourElement.querySelector('input[type=color]');
@@ -669,12 +714,14 @@
 
     // ***********************************
     // Transform Text methods
+    // called inside tryTransformText()
     // ***********************************
 
     /**
      * @param {TextMatchPart[]} textParts
+     * @param {Line} line
      */
-    function transformTextToEmoteText(textParts) {
+    function transformTextToEmoteText(textParts, line) {
       let text = '';
       for (const part of textParts) {
         if (!part.transform) {
@@ -689,8 +736,9 @@
 
     /**
      * @param {TextMatchPart[]} textParts
+     * @param {Line} line
      */
-    function transformAsterisksAsEmote(textParts) {
+    function transformAsterisksAsEmote(textParts, line) {
       let text = '';
       for (const part of textParts) {
         if (!part.transform) {
@@ -702,6 +750,104 @@
       }
 
       return text;
+    }
+
+    /**
+     * @param {TextMatchPart[]} textParts
+     * @param {Line} line
+     */
+    function transformQuotesToSayOrCustomSender(textParts, line) {
+      let text = '';
+      for (const part of textParts) {
+        if (!part.transform) {
+          text += part.text;
+        } else {
+          let className;
+          if (customSenderColours.indexOf(line.senderReference) !== -1) {
+            className = line.senderReference.class;
+          } else {
+            className = messageTypes['000a'].class;
+          }
+          text += `<span class="${className}">${part.text}</span>`;
+        }
+      }
+
+      return text;
+    }
+
+    /**
+     * @param {TextMatchPart[]} textParts
+     * @param {Line} line
+     */
+    function transformOutOfCharacter(textParts, line) {
+      let text = '';
+      for (const part of textParts) {
+        if (!part.transform) {
+          text += part.text;
+        } else {
+          text += `<span style="opacity: 0.8">${part.text}</span>`;
+        }
+      }
+
+      return text;
+    }
+
+    // *************************************
+    // Transformer Matching methods
+    // *************************************
+    /**
+     * @param {string} text
+     * @param {TextTransformer} transformer
+     * @returns {RegExpMatchArray[]}
+     */
+    function getQuotationMatches(text, transformer) {
+      let matches = [];
+      let currentIndex = 0;
+
+      while (currentIndex < text.length) {
+        const nextIndices = getNextQuotationIndices(text, currentIndex);
+        if (!nextIndices) {
+          break;
+        }
+
+        const match = [text.substr(nextIndices.openingIndex, nextIndices.closingIndex - nextIndices.openingIndex)];
+        match.index = nextIndices.openingIndex;
+        matches.push(match);
+        currentIndex = nextIndices.closingIndex;
+      }
+
+      return matches;
+    }
+
+    /**
+     * @returns {{ openingIndex: number, closingIndex: number } | undefined}
+     */
+    function getNextQuotationIndices(text, currentIndex) {
+      const quotations = [];
+
+      for (const quotationRule of quotationRules) {
+        const openingIndex = text.indexOf(quotationRule.opening, currentIndex);
+        if (openingIndex === -1) {
+          continue;
+        }
+
+        for (const closingCharacter of quotationRule.closing) {
+          const closingIndex = text.indexOf(closingCharacter, openingIndex + 1);
+          if (closingIndex !== -1) {
+            quotations.push({
+              openingIndex,
+              closingIndex: closingIndex + closingCharacter.length,
+            });
+          }
+        }
+      }
+
+      if (!quotations.length) {
+        return undefined;
+      }
+
+      quotations.sort((a, b) => a.openingIndex - b.openingIndex);
+      return quotations[0];
     }
 
     /**
@@ -758,21 +904,6 @@
       return matches;
     }
 
-    /**
-     * @param {TextMatchPart[]} textParts
-     */
-    function transformOutOfCharacter(textParts) {
-      let text = '';
-      for (const part of textParts) {
-        if (!part.transform) {
-          text += part.text;
-        } else {
-          text += `<span style="opacity: 0.8">${part.text}</span>`;
-        }
-      }
-
-      return text;
-    }
 
     // ***********************************
     // Parsing methods
@@ -1001,7 +1132,7 @@
 
       let message = line.message;
       for (const transformer of activeTransformers) {
-        message = tryTransformText(message, transformer, line.code);
+        message = tryTransformText(message, transformer, line);
       }
 
       return message;
@@ -1010,9 +1141,9 @@
     /**
      * @param {string} text
      * @param {TextTransformer} transformer
-     * @param {string} lineCode
+     * @param {Line} line
      */
-    function tryTransformText(text, transformer, lineCode) {
+    function tryTransformText(text, transformer, line) {
       let canTransform = false;
       for (const code of transformer.codes) {
         if (code === '*') {
@@ -1020,7 +1151,7 @@
           break;
         }
 
-        if (code === lineCode) {
+        if (code === line.code) {
           canTransform = true;
           break;
         }
@@ -1035,7 +1166,7 @@
         return text;
       }
 
-      return transformer.method(matchedText);
+      return transformer.method(matchedText, line);
     }
 
     /**
@@ -1050,6 +1181,7 @@
         matches = transformer.customMatcher(text, transformer);
       } else if (transformer.regex) {
         matches = [...text.matchAll(transformer.regex)];
+        matches = matches.filter(m => m[0]);
       }
 
       if (!matches?.length) {
