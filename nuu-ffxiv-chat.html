@@ -182,7 +182,7 @@
       <button class="chat-settings">Chat settings</button>
       <div id="filter-popover" style="display: none;">
         <button class="popover-close-button">Close</button>
-        <!-- The content is dynamically added by showFilterTypes, showFilterSenders, sender colours and chat settingsi -->
+        <!-- The content is dynamically added by showFilterTypes, showFilterSenders, sender colours and chat settings -->
         <div class="filter-popover-content"></div>
       </div>
     </div>
@@ -219,7 +219,7 @@
      */
 
     /**
-     * @typedef {{ opening: string, closing: string[] }} QuotationRule
+     * @typedef {{ opening: string, closing: string[], active: boolean }} QuotationRule
      */
 
     // Regexes from https://github.com/ErstonGreatman/ffxiv-act-chat-extractor
@@ -294,22 +294,22 @@
      * @type {QuotationRule[]}
      */
     const quotationRules = [
-      { opening: '`', closing: ['`'] },
-      { opening: '#039;', closing: ['#039;'] },
-      { opening: '&quot;', closing: ['&quot;'] },
-      { opening: '‚', closing: ['‘', '’'] },
-      { opening: '„', closing: ['“'] },
-      { opening: '‘', closing: ['’'] },
-      { opening: '“', closing: ['”'] },
-      { opening: '’', closing: ['’'] },
-      { opening: '‹', closing: ['›'] },
-      { opening: '〈', closing: ['〉'] },
-      { opening: '«', closing: ['»'] },
-      { opening: '《', closing: ['》'] },
-      { opening: '›', closing: ['‹'] },
-      { opening: '»', closing: ['«', '»'] },
-      { opening: '「', closing: ['」'] },
-      { opening: '『', closing: ['』'] },
+      { opening: '`', closing: ['`'], active: true, },
+      { opening: '#039;', closing: ['#039;'], active: false, },
+      { opening: '&quot;', closing: ['&quot;'], active: true, },
+      { opening: '‚', closing: ['‘', '’'], active: true, },
+      { opening: '„', closing: ['“'], active: true, },
+      { opening: '‘', closing: ['’'], active: true, },
+      { opening: '“', closing: ['”'], active: true, },
+      { opening: '’', closing: ['’'], active: true, },
+      { opening: '‹', closing: ['›'], active: true, },
+      { opening: '〈', closing: ['〉'], active: true, },
+      { opening: '«', closing: ['»'], active: true, },
+      { opening: '《', closing: ['》'], active: true, },
+      { opening: '›', closing: ['‹'], active: true, },
+      { opening: '»', closing: ['«', '»'], active: true, },
+      { opening: '「', closing: ['」'], active: true, },
+      { opening: '『', closing: ['』'], active: true, },
     ];
 
     /**
@@ -380,7 +380,6 @@
         }
 
         if (closePopup) {
-          console.log('closing popover');
           closeFilterPopover();
         }
       });
@@ -846,6 +845,10 @@
       const quotations = [];
 
       for (const quotationRule of quotationRules) {
+        if (!quotationRule.active) {
+          continue;
+        }
+
         const openingIndex = text.indexOf(quotationRule.opening, currentIndex);
         if (openingIndex === -1) {
           continue;
@@ -1379,7 +1382,7 @@
       const range = selection.getRangeAt(0);
       const outputElement = document.getElementById('output');
       const errorElement = document.getElementById('error');
-      if (!range.commonAncestorContainer !== outputElement && !outputElement.contains(range.commonAncestorContainer)) {
+      if (range.commonAncestorContainer !== outputElement && !outputElement.contains(range.commonAncestorContainer)) {
         errorElement.innerText = `Can't remove selected text because it's not only the output.`;
         // This is a horrible solution but better than nothing.
         setTimeout(() => {
@@ -1403,6 +1406,7 @@
         return;
       }
 
+      // focus or anchor node can be from either direction depending if you drag left or right with the selection.
       const from = focusLineNumber <= anchorLineNumber ? focusLine : anchorLine;
       const to = focusLineNumber >= anchorLineNumber ? focusLine : anchorLine;
       let removeLines = false;
