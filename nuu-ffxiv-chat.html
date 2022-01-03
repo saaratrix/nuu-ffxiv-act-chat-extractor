@@ -998,7 +998,7 @@
         }
 
         const message = escapeHTML(match.groups['message']);
-        const code = match.groups['code'];
+        const code = match.groups['code'].toLowerCase();
         let item = {
           code,
           message,
