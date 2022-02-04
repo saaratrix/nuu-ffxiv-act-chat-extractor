@@ -12,7 +12,7 @@ This application is created as a standalone HTML page, so you can download the *
 
 ----
 ## How to install and use
-Download latest html file from here: https://github.com/saaratrix/nuu-ffxiv-act-chat-extractor/releases \
+Download latest html file from releases: https://github.com/saaratrix/nuu-ffxiv-act-chat-extractor/releases \
 Then open the nuu-ffxiv-act-chat-extractor.html file in your browser.
 
 
