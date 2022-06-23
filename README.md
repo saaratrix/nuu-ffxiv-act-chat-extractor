@@ -11,6 +11,24 @@ This application is created as a standalone HTML page, so you can download the *
 ----
 You can also use the application directly here: https://saaratrix.github.io/nuu-ffxiv-act-chat-extractor/nuu-ffxiv-act-chat-extractor.html 
 
+---
+### Features overview
+* Can read FFXIV ACT Chat logs!
+* [Can save the modified chat logs.](../../wiki/Save-Chat) 
+  * For example, you might only want to save logs between 2 people.
+* Visibility for messages
+  * By message type, eg: Say, Party, Linkshell.
+  * By sender
+* Colour messages
+  * By message type
+  * By sender
+* [Can delete lines by selecting them and then press Delete on your keyboard.](../../wiki/Delete-Lines)
+* Always show emote colour for example if there is an emote in say.
+* Text in quotes will be coloured as say.
+* Text in asterisks will be coloured as emote.
+* Text in parentheses will be treated as out of character and slightly faded.
+
+
 ----
 How it looks like:
 
@@ -20,6 +38,7 @@ How it looks like:
 
 ----
 Copied regexes from https://github.com/ErstonGreatman/ffxiv-act-chat-extractor. 
+
 Which copied them from here https://github.com/isalin/ACT-Log-Extractor.
 
 
