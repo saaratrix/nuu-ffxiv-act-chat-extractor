@@ -36,8 +36,9 @@ You can also use the application directly here: https://saaratrix.github.io/nuu-
 How it looks like:
 
 ![image](https://user-images.githubusercontent.com/16946048/138957510-7879b850-9cc5-45d1-9ed9-4dcd2ea44a75.png)
-![image](https://user-images.githubusercontent.com/16946048/132962660-8a319c7e-2b5f-4985-8bce-5e88d99d9346.png)
-![image](https://user-images.githubusercontent.com/16946048/132962667-e09a2a7a-8076-47f5-b8e5-a74b301d4028.png)
+![image](https://user-images.githubusercontent.com/16946048/175381879-adbbc074-f20f-44a2-9394-b5880606192a.png)
+![image](https://user-images.githubusercontent.com/16946048/175381921-bbe7b1b1-5e59-4510-b9df-457927b9cf2f.png)
+
 
 ----
 Copied regexes from https://github.com/ErstonGreatman/ffxiv-act-chat-extractor. 
