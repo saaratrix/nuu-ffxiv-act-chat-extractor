@@ -16,6 +16,8 @@ Then open the nuu-ffxiv-act-chat-extractor.html file in your browser.
 
 You can also use the application directly here: https://saaratrix.github.io/nuu-ffxiv-act-chat-extractor/nuu-ffxiv-act-chat-extractor.html 
 
+On Windows the ACT Logs are by default found in the folder `%APPDATA%\Advanced Combat Tracker\FFXIVLogs`
+
 ---
 ### Features overview
 * Can read FFXIV ACT Chat logs!
