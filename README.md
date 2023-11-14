@@ -11,9 +11,9 @@ This application is created as a standalone HTML page, so you can download the *
 
 ----
 ## How to install and use
-You use the application directly here: https://saaratrix.github.io/nuu-ffxiv-act-chat-extractor/nuu-ffxiv-act-chat-extractor.html 
+You can use the application online here: https://saaratrix.github.io/nuu-ffxiv-act-chat-extractor/nuu-ffxiv-act-chat-extractor.html 
 
-Or you can download the [nuu-ffxiv-act-chat-extractor.1.1.0.html](https://github.com/saaratrix/nuu-ffxiv-act-chat-extractor/releases/download/1.1.0/nuu-ffxiv-act-chat-extractor.1.1.0.html) file to your computer. \
+Or you can download the [nuu-ffxiv-act-chat-extractor.1.1.0.html](https://github.com/saaratrix/nuu-ffxiv-act-chat-extractor/releases/download/1.1.0/nuu-ffxiv-act-chat-extractor.1.1.0.html) file to your computer and run it offline. \
 Then open the `nuu-ffxiv-act-chat-extractor.1.1.0.html` file with your browser.
 
 On Windows the ACT Logs are by default found in the folder `%APPDATA%\Advanced Combat Tracker\FFXIVLogs`
