@@ -8,6 +8,7 @@ For example inline emotes and out of character text. \
 ![image](https://user-images.githubusercontent.com/16946048/135769339-64f9a416-8adf-45de-90ba-712557f3306a.png)
 
 This application is created as a standalone HTML page, so you can download the **nuu-ffxiv-act-chat-extractor.html** file and run it locally and then select your chat logs you want to save.
+It might not work in Firefox when running it locally due to some limitations for local html files compared to eg, Chrome. 
 
 ----
 ## How to install and use
